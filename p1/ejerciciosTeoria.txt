@@ -1,0 +1,65 @@
+Ejercicio 1
+
+a) Buscar en el manual la lista de funciones disponibles para el manejo de hilos. Las funciones de manejo de hilos comienzan por <<pthread>>.
+
+man -k pthread
+
+b) Consultar en la ayuda en qué sección del manual se encuentran las <<llamadas al sistema>> y buscar informaciónn sobre la llamada al sistema write.
+
+man man
+man 2 write
+
+Ejercicio 2
+
+a) Escribir un comando que busque las líneas que contengan <<molino>> en el fichero
+<<don quijote.txt>> y las añada al final del fichero <<aventuras.txt>>.
+
+grep molino don_quijote.txt | cat >> aventuras.txt
+
+b) Elaborar un pipeline que cuente el número de ficheros en el directorio actual.
+
+ls | wc -l
+
+c) Elaborar un pipeline que cuente el número de líneas distintas al concatenar <<lista
+de la compra Pepe.txt>> y <<lista de la compra Elena.txt>> y lo escriba en <<num
+compra.txt>>. Si alguno de los ficheros no existe, hay que ignorar los mensajes de
+error, para lo cual se redirigirá la salida de errores a /dev/null
+
+cat "lista de la compra Elena.txt" "lista de la compra Pepe.txt" 2> /dev/null | sort | uniq | wc -l | cat > "num compra.txt"
+
+Ejercicio 3
+
+
+Ejercicio 8
+
+a) Porque sigue ejecutando el programa ls en la llamada a la funcion execvp
+
+b) cambiar la linea de la llamada a execvp por lo siguiente:
+
+	execl("/usr/bin/ls", argv[1], argv[2])
+
+Debemos pasar el path completo ya que no usamos la p en la función exec y los argumentos deben ser pasados en formato de lista.
+
+Ejercicio 9
+
+a) El proceso 4791 es el bash
+
+ls -l /proc/4791/ex
+
+lrwxrwxrwx 1 e382446 alumnos 0 feb 21 14:39 /proc/4791/exe -> /usr/bin/bash
+
+cat /proc/4791/cmdline | tr '\0' '\n'
+
+cat /proc/4791/environ | tr '\0' '\n'
+
+cat /proc/4791/environ | tr '\0' '\n' | grep "LANG"
+
+cat /proc/4791/task  /* PARA VER LOS HILOS DEL PROCESO */
+
+
+
+
+
+
+
+
