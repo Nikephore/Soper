@@ -57,9 +57,28 @@ cat /proc/4791/environ | tr '\0' '\n' | grep "LANG"
 cat /proc/4791/task  /* PARA VER LOS HILOS DEL PROCESO */
 
 
+Ejercicio 10
+
+a) Los ficheros stdin, stdout y stderr
+
+b) Se abren los ficheros 1 y 2
+
+c) Se puede recuperar haciendo cat y redirigiendolo a otro fichero
+
+d) El fichero 1 se termina de eliminar y se asigna el mismo fichero abierto a varios procesos, cada uno con sus flags 
 
 
+Ejercicio 11
 
+a) Se muestra 2 veces el mensaje de "I am your father". Esto es debido a que el printf se encuentra aun en el buffer
+b) Cuando pones \n se vacía el buffer 
 
+c) El fichero al que redirigimos la salida tiene el mismo error encontrado en el apartado A. Utiliza el buffer porque se usa fichero en lugar de terminal
 
+d) usando el fflush para vaciar el buffer después del printf.
 
+Ejercicio 12
+
+a) 
+
+b) Se queda atascado en la tuberia porque esta esperando a que alguien escriba, pero el proceso al que espera es él mismo
