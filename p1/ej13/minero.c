@@ -48,7 +48,7 @@ void *target_search(void *objective)
  * @brief Create and manage threads that will search the solution of the POW function.
  *
  * @param n_threads Number of threads to manage.
- * @param target    
+ * @param target
  * @return Exit of the thread.
  */
 int manage_threads(int n_threads, int target)
@@ -102,9 +102,11 @@ int manage_threads(int n_threads, int target)
   return solution;
 }
 
-int miner(int n_cycles, int n_threads, int target)
+int miner(int n_cycles, int n_threads, int target, int miner_to_monitor, int monitor_to_miner)
 {
+  ssize_t nbytes;
   int solution;
+  int solution_check = 1; /* 0 if solution is correct, 1 if not */
 
   for (int i = 0; i < n_cycles; i++)
   {
@@ -116,8 +118,35 @@ int miner(int n_cycles, int n_threads, int target)
       printf("No se ha encontrado una solucion para la ronda %d\n", i + 1);
       exit(EXIT_FAILURE);
     }
+
+    nbytes = write(miner_to_monitor, &solution, sizeof(solution));
+    if (nbytes == -1)
+    {
+      perror("write");
+      exit(EXIT_FAILURE);
+    }
+
+    nbytes = read(monitor_to_miner, &solution_check, sizeof(solution_check));
+    if (nbytes == -1)
+    {
+      perror("read");
+      exit(EXIT_FAILURE);
+    }
+
+    /* The solution has been invalidated */
+    if(solution_check == 1) exit(EXIT_FAILURE);
+
     target = solution;
   }
+
+  /* All rounds finished, notifying the monitor */
+  solution = -1;
+  nbytes = write(miner_to_monitor, &solution, sizeof(int));
+  if (nbytes == -1)
+    {
+      perror("write");
+      exit(EXIT_FAILURE);
+    }
 
   return EXIT_SUCCESS;
 }

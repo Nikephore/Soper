@@ -16,10 +16,8 @@
 
 /**
  * @brief Verify the solutions found by Miner process
- *
- * @param n_cycles  Number of rounds to mine.
- * @param n_threads Number of threads that will search for the target.
- * @param target    Target of the POW function.
+ * @param send      Pipe to send information to the miner.
+ * @param recieve   Pipe to recieve information from the miner.
  * @return EXIT_SUCCESS or EXIT_FAILURE
  */
-void monitor();
+void monitor(int send, int recieve);

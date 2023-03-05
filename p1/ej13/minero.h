@@ -29,6 +29,8 @@ typedef struct
  * @param n_cycles  Number of rounds to mine.
  * @param n_threads Number of threads that will search for the target.
  * @param target    Target of the POW function.
+ * @param send      Pipe to send information to the monitor.
+ * @param recieve   Pipe to recieve information from the monitor.
  * @return EXIT_SUCCESS or EXIT_FAILURE
  */
-int miner(int n_cycles, int n_threads, int target);
+int miner(int n_cycles, int n_threads, int target, int send, int recieve);

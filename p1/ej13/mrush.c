@@ -3,7 +3,6 @@
 
 #define MAX_THREADS 100
 #define MAX_CYCLES 20
-#define ERROR -1
 
 void pid_error_handler(pid_t pid)
 {
@@ -15,13 +14,42 @@ void pid_error_handler(pid_t pid)
 	return;
 }
 
+void pipe_error_handler(int pipe_status)
+{
+	if (pipe_status == -1)
+	{
+		perror("pipe");
+		exit(EXIT_FAILURE);
+	}
+}
+
+void number_range_error_handler(int min, int max, int value, char *msg)
+{
+
+	if (value < min)
+	{
+		fprintf(stderr, "%s can't be lower than %d\n", msg, min);
+		exit(EXIT_FAILURE);
+	}
+	if (value > max)
+	{
+		fprintf(stderr, "%s can't be higher than %d\n", msg, max);
+		exit(EXIT_FAILURE);
+	}
+
+	return;
+}
+
 int main(int argc, char *argv[])
 {
-	pid_t pid;
-	int n_cycles;
-	int n_threads;
-	int target_ini;
-	int ret;
+	pid_t miner_pid, monitor_pid;
+	int n_cycles, n_threads, target_ini;
+
+	/* Define the pipes */
+	int miner_to_monitor[2];
+	int monitor_to_miner[2];
+
+	int pipe_status;
 
 	/* Control de errores num arguentos*/
 	if (argc != 4)
@@ -29,66 +57,64 @@ int main(int argc, char *argv[])
 		printf("No se ha pasado el numero correcto de argumentos\n");
 		printf("El formato correcto es:\n");
 		printf("./programa <Target inicial> <Num_ciclos> <Num_hilos>");
-		return ERROR;
+		exit(EXIT_FAILURE);
 	}
 
 	target_ini = atoi(argv[1]);
-	if (target_ini < 0)
-	{
-		printf("El target no puede ser inferior a 0");
-		return ERROR;
-	}
+	number_range_error_handler(0, POW_LIMIT - 1, target_ini, "Target");
 
 	/* Establecemos el numero de ciclos */
 	n_cycles = atoi(argv[2]);
-	if (n_cycles < 1)
-	{
-		printf("El numero de ciclos no puede ser inferior a 1");
-		return ERROR;
-	}
-
-	if (n_cycles > MAX_CYCLES)
-	{
-		printf("El numero de ciclos no puede ser superior a %d", MAX_CYCLES);
-		return ERROR;
-	}
+	number_range_error_handler(1, MAX_CYCLES, n_cycles, "Number of cycles");
 
 	/* Establecemos el numero de hilos */
 	n_threads = atoi(argv[3]);
-	if (n_threads < 1)
-	{
-		printf("El numero de hilos no puede ser inferior a 1");
-		return ERROR;
-	}
-
-	if (n_threads > MAX_THREADS)
-	{
-		printf("El numero de hilos no puede ser superior a %d", MAX_THREADS);
-		return ERROR;
-	}
+	number_range_error_handler(1, MAX_THREADS, n_threads, "Number of threads");
 
 	fprintf(stdout, "Soy el proceso principal, mi pid es %d\n", getpid());
 
-	pid = fork();
-	pid_error_handler(pid);
+	/* [0] is to Read | [1] is to Write */
+	pipe_status = pipe(miner_to_monitor);
+	pipe_error_handler(pipe_status);
 
-	if (pid == 0)
+	pipe_status = pipe(monitor_to_miner);
+	pipe_error_handler(pipe_status);
+
+	miner_pid = fork();
+	pid_error_handler(miner_pid);
+
+	if (miner_pid == 0)
 	{
-		fprintf(stdout, "Im Miner, my id is: %d | My parent is %d\n", getpid(), getppid());
-		pid = fork();
-		pid_error_handler(pid);
+		monitor_pid = fork();
+		pid_error_handler(monitor_pid);
 
-		if(pid == 0){
-			fprintf(stdout, "Im Monitor, my id is: %d | My parent is %d\n", getpid(), getppid());
-			monitor();
-		} 
-		else
+		if (monitor_pid == 0) /* Monitor process */
 		{
-			ret = miner(n_cycles, n_threads, target_ini);
-		}
-		wait(NULL);
-	}
-	wait(NULL);
+			/* Close the read end on the monitor */
+			close(monitor_to_miner[0]);
+			/* Close the write end on the monitor */
+			close(miner_to_monitor[1]);
 
-	return ret;
+			fprintf(stdout, "Im Monitor, my id is: %d | My parent is %d\n", getpid(), getppid());
+			monitor(monitor_to_miner[1], miner_to_monitor[0]);
+		}
+		else /* Miner process */
+		{
+			/* Close the read end on the miner */
+			close(miner_to_monitor[0]);
+			/* Close the write end on the miner */
+			close(monitor_to_miner[1]);
+
+			miner(n_cycles, n_threads, target_ini, miner_to_monitor[1], monitor_to_miner[0]);
+			wait(NULL);
+			printf("Monitor exited with status %d\n", WIFEXITED(monitor_pid));
+		}
+	}
+	else
+	{
+		wait(NULL);
+		printf("Miner exited with status %d\n", WIFEXITED(miner_pid));
+	}
+
+	exit(EXIT_SUCCESS);
 }
