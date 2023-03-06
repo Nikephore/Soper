@@ -2,7 +2,7 @@
 #include "monitor.h"
 
 #define MAX_THREADS 100
-#define MAX_CYCLES 20
+#define MAX_CYCLES 50
 
 void pid_error_handler(pid_t pid)
 {
@@ -44,8 +44,10 @@ int main(int argc, char *argv[])
 {
 	pid_t miner_pid, monitor_pid;
 	int n_cycles, n_threads, target_ini;
+	int status;
+	int miner_exit_status;
 
-	/* Define the pipes */
+	/* Variables related to pipes */
 	int miner_to_monitor[2];
 	int monitor_to_miner[2];
 
@@ -71,8 +73,6 @@ int main(int argc, char *argv[])
 	n_threads = atoi(argv[3]);
 	number_range_error_handler(1, MAX_THREADS, n_threads, "Number of threads");
 
-	fprintf(stdout, "Soy el proceso principal, mi pid es %d\n", getpid());
-
 	/* [0] is to Read | [1] is to Write */
 	pipe_status = pipe(miner_to_monitor);
 	pipe_error_handler(pipe_status);
@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
 			/* Close the write end on the monitor */
 			close(miner_to_monitor[1]);
 
-			fprintf(stdout, "Im Monitor, my id is: %d | My parent is %d\n", getpid(), getppid());
-			monitor(monitor_to_miner[1], miner_to_monitor[0]);
+			monitor(monitor_to_miner[1], miner_to_monitor[0], target_ini);
+			printf("Monitor ha terminado\n");
 		}
 		else /* Miner process */
 		{
@@ -105,15 +105,21 @@ int main(int argc, char *argv[])
 			/* Close the write end on the miner */
 			close(monitor_to_miner[1]);
 
-			miner(n_cycles, n_threads, target_ini, miner_to_monitor[1], monitor_to_miner[0]);
-			wait(NULL);
-			printf("Monitor exited with status %d\n", WIFEXITED(monitor_pid));
+			miner_exit_status = miner(n_cycles, n_threads, target_ini, miner_to_monitor[1], monitor_to_miner[0]);
+
+			waitpid(monitor_pid, &status, 0);
+			if (WIFEXITED(status))
+				printf("Monitor exited with status %d\n", WEXITSTATUS(status));
+
+			exit(miner_exit_status);
+			
 		}
 	}
-	else
+	else /* Main process */
 	{
-		wait(NULL);
-		printf("Miner exited with status %d\n", WIFEXITED(miner_pid));
+		waitpid(miner_pid, &status, 0);
+		if (WIFEXITED(status))
+			printf("Miner exited with status %d\n", WEXITSTATUS(status));
 	}
 
 	exit(EXIT_SUCCESS);

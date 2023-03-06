@@ -18,6 +18,7 @@
  * @brief Verify the solutions found by Miner process
  * @param send      Pipe to send information to the miner.
  * @param recieve   Pipe to recieve information from the miner.
+ * @param target    First target of the miner.
  * @return EXIT_SUCCESS or EXIT_FAILURE
  */
-void monitor(int send, int recieve);
+void monitor(int send, int recieve, int target);
