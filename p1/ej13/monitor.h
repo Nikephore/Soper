@@ -1,6 +1,6 @@
 /**
  * @file monitor.h
- * @author Luis Miguel Nucifora & Alexis [APELLIDO].
+ * @author Luis Miguel Nucifora & Alexis Canales Molina.
  * @brief Monitor the activity of the miners.
  *
  * @copyright Copyright (c) 2023
