@@ -1,6 +1,6 @@
 /**
  * @file minero.h
- * @author Luis Miguel Nucifora & Alexis [APELLIDO].
+ * @author Luis Miguel Nucifora & Alexis Canales Molina.
  * @brief Manage the threads and find the target of the POW function.
  *
  * @copyright Copyright (c) 2023
