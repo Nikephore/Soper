@@ -2,18 +2,26 @@
 
 #define MAX_PROCS 100
 #define MAX_SECS 60
-#define MIN_SECS 10
+#define MIN_SECS 1
+
+#define SEM_CANDIDATE "/sem_candidate"
 
 static volatile sig_atomic_t usr1 = 0;
 static volatile sig_atomic_t usr2 = 0;
 
-void sigusr1_handler(int sig) { usr1 = 1; }
-
-void sigusr2_handler(int sig) { usr2 = 1; }
+void catcher(int sig)
+{
+    switch (sig)
+    {
+    case SIGUSR1:
+        usr1 = 1;
+    case SIGUSR2:
+        usr2 = 1;
+    }
+}
 
 void number_range_error_handler(int min, int max, int value, char *msg)
 {
-
     if (value < min)
     {
         fprintf(stderr, "%s can't be lower than %d\n", msg, min);
@@ -24,7 +32,6 @@ void number_range_error_handler(int min, int max, int value, char *msg)
         fprintf(stderr, "%s can't be higher than %d\n", msg, max);
         exit(EXIT_FAILURE);
     }
-
     return;
 }
 
@@ -42,28 +49,34 @@ void voter()
 {
     fprintf(stdout, "Im a voter, mi id is %d\n", getpid());
 
-    while (1)
-    {
-        printf("Waiting Ctrl+C (PID = %d)\n", getpid());
-        if (usr1)
-        {
-            usr1 = 0;
-            printf("Signal received.\n");
-        }
-        sleep(9999);
-    }
+    fprintf(stdout, "%d | Antes del while \n", getpid());
+
+    // sigsuspend(&set);
+
+    fprintf(stdout, "%d | Return from suspended successful\n", getpid());
+
+    return;
 }
 
 int main(int argc, char *argv[])
 {
     int n_procs, n_secs;
-    int status;
-    int written = 0, red = 0;
+    int written = 0;
     pid_t main_pid;
     pid_t *voter_id;
-    pid_t *return_ids;
     FILE *fp;
-    struct sigaction act;
+    struct sigaction sact;
+    sigset_t sigset;
+    sem_t *sem_c = NULL;
+
+    sem_unlink(SEM_CANDIDATE);
+
+    if ((sem_c = sem_open(SEM_NAME_A, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) ==
+        SEM_FAILED)
+    {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
 
     /* Control de errores de argumentos */
     if (argc != 3)
@@ -85,30 +98,39 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    /*
-    return_ids = (pid_t *)calloc(n_procs, sizeof(pid_t));
-    if(!return_ids)
-    {
-        fprintf(stderr, "Can't allocate child processes memory\n");
-        exit(EXIT_FAILURE);
-    }
-    */
+    sigemptyset(&sact.sa_mask);
+    sact.sa_flags = 0;
+    sact.sa_handler = catcher;
+    if (sigaction(SIGUSR1, &sact, NULL) != 0)
+        perror("1st sigaction() error");
 
     main_pid = getpid();
 
+    /* Creamos los N Procesos */
     for (int i = 0; i < n_procs; i++)
     {
         voter_id[i] = fork();
         pid_error_handler(voter_id[i]);
+
+        /* Es un proceso hijo */
+        if (voter_id[i] == 0)
+        {
+
+            // voter();
+
+            printf("valor flag antes %d \n", usr1);
+
+            sigdelset(&sigset, SIGUSR1);
+            printf("%d is waiting for SIGUSR1\n", getpid());
+            sigsuspend(&sigset);
+
+            exit(EXIT_SUCCESS);
+        }
     }
 
     if (main_pid == getpid())
     {
         fprintf(stdout, "Im the main process, mi id is %d\n", getpid());
-        for (int i = 0; i < n_procs; i++)
-        {
-            fprintf(stdout, "%d\n", voter_id[i]);
-        }
 
         fp = fopen("pids.bin", "w+");
         if (fp == NULL)
@@ -125,27 +147,25 @@ int main(int argc, char *argv[])
             fprintf(stderr, "Error writing voters ids on file\n");
         }
 
-        act.sa_handler = sigusr1_handler;
-        if (sigaction(SIGINT, &act, NULL) < 0)
+        for (int i = 0; i < n_procs; i++)
         {
-            perror("sigaction");
-            exit(EXIT_FAILURE);
+            fprintf(stdout, "Sending SIGUSR1 to %d\n", voter_id[i]);
+            kill(voter_id[i], SIGUSR1);
         }
 
-        for (int i = 0; i < n_procs; i++)
-            kill(voter_id, SIGUSR1);
+        fprintf(stdout, "%d | terminado kill\n", getpid());
 
         for (int i = 0; i < n_procs; i++)
+        {
             wait(NULL);
+            fprintf(stdout, "he hecho un wait\n");
+        }
+
+        fprintf(stdout, "%d | terminado waits\n", getpid());
 
         fclose(fp);
         free(voter_id);
         // free(return_ids);
-    }
-    else
-    {
-        voter();
-        exit(EXIT_SUCCESS);
     }
 
     /*
@@ -165,4 +185,5 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     */
+    exit(EXIT_SUCCESS);
 }
