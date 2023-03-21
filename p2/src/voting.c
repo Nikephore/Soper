@@ -69,19 +69,19 @@ int main(int argc, char *argv[])
     sigset_t sigset;
     sem_t *sem_c = NULL;
 
-    sem_unlink(SEM_CANDIDATE);
-
-    if ((sem_c = sem_open(SEM_NAME_A, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) ==
-        SEM_FAILED)
-    {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
-
     /* Control de errores de argumentos */
     if (argc != 3)
     {
         fprintf(stderr, "Correct format: ./voting <N_PROCS> <N_SECS>\n");
+        exit(EXIT_FAILURE);
+    }
+
+    sem_unlink(SEM_CANDIDATE);
+
+    if ((sem_c = sem_open(SEM_CANDIDATE, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) ==
+        SEM_FAILED)
+    {
+        perror("sem_open");
         exit(EXIT_FAILURE);
     }
 
