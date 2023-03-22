@@ -8,6 +8,8 @@
 
 static volatile sig_atomic_t usr1 = 0;
 static volatile sig_atomic_t usr2 = 0;
+static volatile sig_atomic_t sint = 0;
+static volatile sig_atomic_t salarm = 0;
 
 void catcher(int sig)
 {
@@ -15,9 +17,17 @@ void catcher(int sig)
     {
     case SIGUSR1:
         usr1 = 1;
+        break;
     case SIGUSR2:
         usr2 = 1;
+        break;
+    case SIGINT:
+        sint = 1;
+        break;
+    case SIGALRM:
+        salarm = 1;
     }
+    
 }
 
 void number_range_error_handler(int min, int max, int value, char *msg)
@@ -76,20 +86,23 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    sem_unlink(SEM_CANDIDATE);
-
-    if ((sem_c = sem_open(SEM_CANDIDATE, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) ==
-        SEM_FAILED)
-    {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
-
     n_procs = atoi(argv[1]);
     number_range_error_handler(1, MAX_PROCS, n_procs, "Number of processes");
 
     n_secs = atoi(argv[2]);
     number_range_error_handler(MIN_SECS, MAX_SECS, n_secs, "Number of seconds");
+
+    /* Inicializar semaforo de eleccion de candidato */
+    // sem_unlink(SEM_CANDIDATE);
+
+    /*
+    if ((sem_c = sem_open(SEM_CANDIDATE, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+    */
+    
 
     voter_id = (pid_t *)calloc(n_procs, sizeof(pid_t));
     if (!voter_id)
@@ -98,11 +111,19 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    sigemptyset(&sact.sa_mask);
+
+    /* Inicializacion de señales */
+    sigfillset(&sact.sa_mask);
     sact.sa_flags = 0;
     sact.sa_handler = catcher;
     if (sigaction(SIGUSR1, &sact, NULL) != 0)
-        perror("1st sigaction() error");
+        perror("sigaction() SIGUSR1 error");
+    
+    if (sigaction(SIGINT, &sact, NULL) != 0)
+        perror("sigaction() SIGUSR1 error");
+
+    if (sigaction(SIGALRM, &sact, NULL) != 0)
+        perror("sigaction() SIGUSR1 error");
 
     main_pid = getpid();
 
@@ -115,14 +136,20 @@ int main(int argc, char *argv[])
         /* Es un proceso hijo */
         if (voter_id[i] == 0)
         {
+            sigdelset(&sact.sa_mask, SIGUSR1);
+            do
+            {
+                if()
+                
+                printf("%d is waiting for SIGUSR1, sint = %d\n", getpid(), sint);
+                sigsuspend(&sact.sa_mask);
 
-            // voter();
+                printf("%d ha hecho una ronda, sint = %d\n", getpid(), sint);
 
-            printf("valor flag antes %d \n", usr1);
 
-            sigdelset(&sigset, SIGUSR1);
-            printf("%d is waiting for SIGUSR1\n", getpid());
-            sigsuspend(&sigset);
+            } while (sint == 0);
+            
+            
 
             exit(EXIT_SUCCESS);
         }
@@ -143,9 +170,16 @@ int main(int argc, char *argv[])
         if (written == 0)
         {
             for (int i = 0; i < n_procs; i++)
+            {
+                kill(voter_id[i], SIGTERM);
                 wait(NULL);
+            }    
             fprintf(stderr, "Error writing voters ids on file\n");
+            free(voter_id);
+            fclose(fp);
+            exit(EXIT_FAILURE);
         }
+        fclose(fp);
 
         for (int i = 0; i < n_procs; i++)
         {
@@ -153,18 +187,32 @@ int main(int argc, char *argv[])
             kill(voter_id[i], SIGUSR1);
         }
 
-        fprintf(stdout, "%d | terminado kill\n", getpid());
+        do{ sleep(0.1) } while (sint == 0 && salarm == 0);
 
+        for (int i = 0; i < n_procs; i++)
+        {
+            fprintf(stdout, "Sending SIGTERM to %d\n", voter_id[i]);
+            kill(voter_id[i], SIGTERM);
+        }
+        
         for (int i = 0; i < n_procs; i++)
         {
             wait(NULL);
             fprintf(stdout, "he hecho un wait\n");
         }
 
-        fprintf(stdout, "%d | terminado waits\n", getpid());
+        
 
-        fclose(fp);
+        if(sint == 1)
+            fprintf(stdout, "Finishing by signal");
+
+        if(salarm == 1)
+            fprintf(stdout, "Finishing by alarm");
+
+        
         free(voter_id);
+
+        
         // free(return_ids);
     }
 
