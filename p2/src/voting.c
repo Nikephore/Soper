@@ -8,21 +8,16 @@
 #define SEM_FILE "/sem_file"
 #define SEM_SIGNAL "/sem_signal"
 
-static volatile sig_atomic_t usr1 = 0;
-static volatile sig_atomic_t usr2 = 0;
 static volatile sig_atomic_t sint = 0;
 static volatile sig_atomic_t salarm = 0;
-static int written = 0;
 
 void catcher(int sig)
 {
     switch (sig)
     {
     case SIGUSR1:
-        usr1 = 1;
         break;
     case SIGUSR2:
-        usr2 = 1;
         break;
     case SIGINT:
         sint = 1;
@@ -67,8 +62,7 @@ void cleaner(voter *voters, FILE *fd)
 void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, sem_t *sem_s, int n_procs)
 {
     int candidate = 0, result = 0, vote;
-    int bytes = 0;
-    double random;
+    //int bytes = 0;
     FILE *fp;
     voter aux_voter;
 
@@ -126,32 +120,7 @@ void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, sem_t *sem
             }
 
             printf("-------------\nCOMPROBAR QUE TODOS ESTAN ESPERANDO A SIGUSR2 %d\n------------------\n", getpid());
-
             kill(0, SIGUSR2);
-            /*
-            fp = fopen("pids.bin", "r+b");
-            if (fp == NULL)
-            {
-                perror("fopen");
-                exit(EXIT_FAILURE);
-            }
-
-            // for(int i = 0; i < n_procs; i++)
-            while (fread(&aux_voter, sizeof(voter), 1, fp) == 1)
-            {
-                printf("%d valor leido del fichero\n", aux_voter.voter_pid);
-                /* Leemos los pids de los procesos desde el fichero para enviar SIGUSR2 
-                if (aux_voter.voter_pid != getpid())
-                {
-                    printf("%d no es el candidato\n", aux_voter.voter_pid);
-                    fprintf(stdout, "Sending SIGUSR2 to %d | %d i\n\n", aux_voter.voter_pid, aux_voter.vote);
-
-                    kill(aux_voter.voter_pid, SIGUSR2);
-                }
-            }
-
-            fclose(fp);
-            */
         }
         else /* Procesos que no son candidatos */
         {
@@ -197,15 +166,22 @@ void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, sem_t *sem
                 perror("fopen");
                 exit(EXIT_FAILURE);
             }
+
             /*
             do
             {
-                sleep(0.001);
-            } while (fread(&bytes, sizeof(int), n_procs, fp) != n_procs);
+                fseek(fp, 0, SEEK_SET);
+                sleep(0.005);
+                printf("*");
+                bytes = fread(&bytes, sizeof(int), n_procs, fp);
+                printf("%d", bytes);
+            } while (bytes != n_procs);
             */
+
             sleep(5);
-            printf("\nVOY A LEER LOS VOTOS\n");
-            printf("Candidate %d => [ ", getpid());
+            // printf("\n\n%ld\n\n", fread(&bytes, sizeof(int), n_procs, fp));
+            // printf("\nVOY A LEER LOS VOTOS\n");
+            // printf("Candidate %d => [ ", getpid());
             while (fread(&vote, sizeof(int), 1, fp))
             {
                 /* Leemos los votos que han dejado los votantes */
@@ -273,7 +249,6 @@ int main(int argc, char *argv[])
     voter *voters;
     FILE *fp;
     struct sigaction sact;
-    sigset_t sigset;
     sem_t *sem_c = NULL, *sem_f = NULL, *sem_s = NULL;
 
     /* Control de errores de argumentos */
