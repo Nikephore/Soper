@@ -6,11 +6,13 @@
 
 #define SEM_CANDIDATE "/sem_candidate"
 #define SEM_FILE "/sem_file"
+#define SEM_SIGNAL "/sem_signal"
 
 static volatile sig_atomic_t usr1 = 0;
 static volatile sig_atomic_t usr2 = 0;
 static volatile sig_atomic_t sint = 0;
 static volatile sig_atomic_t salarm = 0;
+static int written = 0;
 
 void catcher(int sig)
 {
@@ -62,21 +64,30 @@ void cleaner(voter *voters, FILE *fd)
     return;
 }
 
-void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, int n_procs)
+void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, sem_t *sem_s, int n_procs)
 {
-    int candidate = 0, result = 0;
+    int candidate = 0, result = 0, vote;
+    int bytes = 0;
+    double random;
     FILE *fp;
     voter aux_voter;
-
-    printf("%d nprocs\n", n_procs);
 
     sigfillset(&sact.sa_mask);
     sigdelset(&sact.sa_mask, SIGTERM);
     sigdelset(&sact.sa_mask, SIGUSR1);
+
     do
     {
-        printf("%d is waiting for SIGUSR1\n", getpid());
-        sigsuspend(&sact.sa_mask);
+        /* Si el proceso no es el candidato de la ronda anterior
+            espera a recibir SIGUSR1 por parte del candidato
+            o por parte del proceso principal (primera ronda)*/
+        if (candidate == 0)
+        {
+            printf("%d is waiting for SIGUSR1\n", getpid());
+            sem_post(sem_s);
+            sigsuspend(&sact.sa_mask);
+            printf("%d waited for SIGUSR1\n", getpid());
+        }
 
         /* Bloqueamos SIGUSR1 */
         sigaddset(&sact.sa_mask, SIGUSR1);
@@ -84,40 +95,74 @@ void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, int n_proc
         /* Desbloqueamos SIGUSR2 para poder hacer la votacion*/
         sigdelset(&sact.sa_mask, SIGUSR2);
 
-        printf("%d is trying to be the candidate\n", getpid());
         /* Intenta ser el proceso candidato, si sem_trywait es 0 lo consigue*/
+        printf("%d INTENTA SER CANDIDATO\n", getpid());
         if (sem_trywait(sem_c) == 0)
         {
+
             candidate = 1;
             printf("YO, %d SOY EL PROCESO CANDIDATO\n", getpid());
+
+            /* Dejamos el fichero de los votos vacio */
+            fp = fopen("votes.bin", "w");
+            if (fp == NULL)
+            {
+                perror("fopen");
+                exit(EXIT_FAILURE);
+            }
+            fclose(fp);
+
             /* Enviar SIGUSR2 a los procesos para comenzar la votacion*/
+
+            // inicializa un semaforo usando la funcion sem_open(). El valor inicial del semaforo sera 1
+
+            for (int i = 0; i < n_procs - 1; i++)
+            {
+                sem_getvalue(sem_s, &result);
+                printf("\n\n%d EL VALOR DEL SEMAFORO ES %d ANTES DEL WAIT\n\n", getpid(), result);
+                sem_wait(sem_s);
+                sem_getvalue(sem_s, &result);
+                printf("\n\n%d EL VALOR DEL SEMAFORO ES %d \n EL CANDIDATO HA HECHO %d WAITS\n\n", getpid(), result, i + 1);
+            }
+
+            printf("-------------\nCOMPROBAR QUE TODOS ESTAN ESPERANDO A SIGUSR2 %d\n------------------\n", getpid());
+
+            kill(0, SIGUSR2);
+            /*
             fp = fopen("pids.bin", "r+b");
             if (fp == NULL)
             {
                 perror("fopen");
                 exit(EXIT_FAILURE);
             }
-            for (int i = 0; i < n_procs; i++)
-            {
 
-                while (fread(&aux_voter, sizeof(voter), 1, fp))
+            // for(int i = 0; i < n_procs; i++)
+            while (fread(&aux_voter, sizeof(voter), 1, fp) == 1)
+            {
+                printf("%d valor leido del fichero\n", aux_voter.voter_pid);
+                /* Leemos los pids de los procesos desde el fichero para enviar SIGUSR2 
+                if (aux_voter.voter_pid != getpid())
                 {
-                    printf("%d valor leido del fichero\n", aux_voter.voter_pid);
-                    /* Leemos los pids de los procesos desde el fichero para enviar SIGUSR2 */
-                    if (aux_voter.voter_pid != getpid())
-                    {
-                        printf("%d no es el candidato\n", aux_voter.voter_pid);
-                        fprintf(stdout, "Sending SIGUSR2 to %d | %d i\n", aux_voter.voter_pid, aux_voter.vote);
-                        kill(aux_voter.voter_pid, SIGUSR2);
-                    }
+                    printf("%d no es el candidato\n", aux_voter.voter_pid);
+                    fprintf(stdout, "Sending SIGUSR2 to %d | %d i\n\n", aux_voter.voter_pid, aux_voter.vote);
+
+                    kill(aux_voter.voter_pid, SIGUSR2);
                 }
             }
+
             fclose(fp);
+            */
         }
-        else
+        else /* Procesos que no son candidatos */
         {
-            printf("YO, %d waiting for SIGUSR2\n", getpid());
+            sem_getvalue(sem_s, &result);
+            printf("\n\n%d EL VALOR DEL SEMAFORO ANTES ES %d \n", getpid(), result);
+            sem_post(sem_s);
+            sem_getvalue(sem_s, &result);
+            printf("\n\n%d EL VALOR DEL SEMAFORO DESPUES ES %d \n", getpid(), result);
+            printf("---- %d WAITING FOR SIGUSR2 ----\n", getpid());
             sigsuspend(&sact.sa_mask);
+            printf("%d recieved SIGUSR2\n", getpid());
         }
 
         printf("YO, %d SOY UN VOTANTE\n", getpid());
@@ -127,53 +172,50 @@ void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, int n_proc
         sem_wait(sem_f);
         printf("%d ha entrado en el semaforo\n", getpid());
         /* Abrimos fichero */
-        fp = fopen("pids.bin", "r+b");
+        fp = fopen("votes.bin", "a+");
         if (fp == NULL)
         {
             perror("fopen");
             exit(EXIT_FAILURE);
         }
 
-        while (fread(&aux_voter, sizeof(voter), 1, fp) == 1)
-        {
-            /* Buscamos el elemento asociado a este proceso para introducir el voto */
-            if (aux_voter.voter_pid == getpid())
-            {
-                aux_voter.vote = rand() % 2;
-                fseek(fp, ftell(fp) - sizeof(voter), SEEK_SET);
-                fwrite(&aux_voter, sizeof(voter), 1, fp);
-                fclose(fp);
-            }
-        }
+        // Calcular valor aleatorio 0 o 1 e introducirlo en una variable int
+        srand(time(NULL));
+
+        vote = (pow_hash(getpid())) % 2;
+        fwrite(&vote, sizeof(int), 1, fp);
+        fclose(fp);
         sem_post(sem_f);
+        /* Fin de la zona critica */
 
         if (candidate == 1)
         {
-
-            sleep(5);
-            fp = fopen("pids.bin", "r+b");
+            printf("\nEL CANDIDATO YA HA VOTADO\n");
+            fp = fopen("votes.bin", "r");
             if (fp == NULL)
             {
                 perror("fopen");
                 exit(EXIT_FAILURE);
             }
-
+            /*
+            do
+            {
+                sleep(0.001);
+            } while (fread(&bytes, sizeof(int), n_procs, fp) != n_procs);
+            */
+            sleep(5);
+            printf("\nVOY A LEER LOS VOTOS\n");
             printf("Candidate %d => [ ", getpid());
-            while (fread(&aux_voter, sizeof(voter), 1, fp) == 1)
+            while (fread(&vote, sizeof(int), 1, fp))
             {
                 /* Leemos los votos que han dejado los votantes */
-                if (aux_voter.vote == 0)
+                if (vote == 0)
                     printf("N ");
-                else if (aux_voter.vote == 1)
+                else if (vote == 1)
                 {
                     result++;
                     printf("Y ");
                 }
-
-                /* Establecemos voto a valor por defecto para la siguiente ronda*/
-                aux_voter.vote = -1;
-                fseek(fp, ftell(fp) - sizeof(voter), SEEK_SET);
-                fwrite(&aux_voter, sizeof(voter), 1, fp);
             }
             fclose(fp);
             /* Segun el resultado obtenido imprimimos aceptado o rechazado*/
@@ -185,30 +227,36 @@ void voter_process(struct sigaction sact, sem_t *sem_c, sem_t *sem_f, int n_proc
             /* Espera no activa de 0.25 segundos antes de la siguiente ronda*/
             sleep(0.25);
 
-            /* Enviar SIGUSR1 a los procesos para comenzar siguiente ronda*/
-            for (int i = 0; i < n_procs; i++)
+            for (int i = 0; i < n_procs - 1; i++)
             {
-                fp = fopen("pids.bin", "r+b");
-                if (fp == NULL)
-                {
-                    perror("fopen");
-                    exit(EXIT_FAILURE);
-                }
+                sem_wait(sem_s);
+                sem_getvalue(sem_s, &result);
+            }
+            /* Enviar SIGUSR1 a los procesos para comenzar siguiente ronda*/
+            fp = fopen("pids.bin", "r+b");
+            if (fp == NULL)
+            {
+                perror("fopen");
+                exit(EXIT_FAILURE);
+            }
 
-                while (fread(&aux_voter, sizeof(voter), 1, fp) == 1)
+            while (fread(&aux_voter, sizeof(voter), 1, fp) == 1)
+            {
+                if (aux_voter.voter_pid != getpid())
                 {
                     fprintf(stdout, "Sending SIGUSR1 to %d\n", aux_voter.voter_pid);
                     kill(aux_voter.voter_pid, SIGUSR1);
                 }
-                fclose(fp);
             }
+            fclose(fp);
+
+            sem_post(sem_c);
         }
 
         /* Desbloqueamos SIGUSR1 para esperar a la siguiente ronda */
         sigaddset(&sact.sa_mask, SIGUSR1);
 
         /* Volvemos al comienzo del bucle para esperar a nueva ronda */
-
     } while (1);
 
     return;
@@ -226,7 +274,7 @@ int main(int argc, char *argv[])
     FILE *fp;
     struct sigaction sact;
     sigset_t sigset;
-    sem_t *sem_c = NULL, *sem_f = NULL;
+    sem_t *sem_c = NULL, *sem_f = NULL, *sem_s = NULL;
 
     /* Control de errores de argumentos */
     if (argc != 3)
@@ -244,10 +292,6 @@ int main(int argc, char *argv[])
     /* En n_secs se mandara SIGALRM */
     alarm(n_secs);
 
-    /* Inicializar semaforo de eleccion de candidato a 1 */
-    sem_unlink(SEM_CANDIDATE);
-    sem_unlink(SEM_FILE);
-
     if ((sem_c = sem_open(SEM_CANDIDATE, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 1)) == SEM_FAILED)
     {
         perror("sem_open");
@@ -259,6 +303,17 @@ int main(int argc, char *argv[])
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
+
+    if ((sem_s = sem_open(SEM_SIGNAL, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Inicializar semaforo de eleccion de candidato a 1 */
+    sem_unlink(SEM_CANDIDATE);
+    sem_unlink(SEM_FILE);
+    sem_unlink(SEM_SIGNAL);
 
     voters = (voter *)calloc(n_procs, sizeof(voter));
     if (!voters)
@@ -288,36 +343,38 @@ int main(int argc, char *argv[])
     /* Creamos los N Procesos */
     for (int i = 0; i < n_procs; i++)
     {
-
         child_id = fork();
         pid_error_handler(child_id);
 
         /* Es un proceso hijo */
         if (child_id == 0)
         {
-            voter_process(sact, sem_c, sem_f, n_procs);
+            voter_process(sact, sem_c, sem_f, sem_s, n_procs);
             exit(EXIT_SUCCESS);
         }
-
-        /* Guardamos los datos de la estructura */
-        voters[i].voter_pid = child_id;
-        voters[i].vote = -1;
+        else /* Si es el proceso padre */
+        {
+            /* Guardamos los datos de la estructura */
+            voters[i].voter_pid = child_id;
+            voters[i].vote = -1;
+        }
     }
 
     if (main_pid == getpid())
     {
         fprintf(stdout, "Im the main process, mi id is %d\n", getpid());
 
+        /* Ponemos a 0 el semaforo de fichero para escribir la estructura de los votantes */
+        sem_wait(sem_f);
         fp = fopen("pids.bin", "w+");
         if (fp == NULL)
         {
             perror("fopen");
             exit(EXIT_FAILURE);
         }
-        sleep(1);
+
         for (int i = 0; i < n_procs; i++)
         {
-            fprintf(stdout, "Proceso hijo %d es %d\n", i, voters[i].voter_pid);
             written = fwrite(&voters[i], sizeof(voter), 1, fp);
             if (written == 0)
             {
@@ -333,17 +390,22 @@ int main(int argc, char *argv[])
             }
         }
         fclose(fp);
+        /* Ponemos a 1 el semaforo de fichero */
+        sem_post(sem_f);
+
+        /* Hacemos tantos sem_waits como procesos haya
+           para asegurarnos que todos esten en el sigsuspend
+           antes de mandar SIGUSR1 */
+        for (int i = 0; i < n_procs; i++)
+            sem_wait(sem_s);
 
         /* Enviar SIGUSR1 a los procesos para comenzar la primera ronda*/
-        for (int i = 0; i < n_procs; i++)
-        {
-            fprintf(stdout, "Sending SIGUSR1 to %d\n", voters[i].voter_pid);
-            kill(voters[i].voter_pid, SIGUSR1);
-        }
+        fprintf(stdout, "Sending SIGUSR1 to child processes\n");
+        kill(0, SIGUSR1);
 
         do
         {
-            sleep(1);
+            sleep(0.25);
         } while (sint == 0 && salarm == 0);
 
         for (int i = 0; i < n_procs; i++)
@@ -351,29 +413,16 @@ int main(int argc, char *argv[])
             fprintf(stdout, "Sending SIGTERM to %d\n", voters[i].voter_pid);
             kill(voters[i].voter_pid, SIGTERM);
             wait(NULL);
-            fprintf(stdout, "he hecho un wait\n");
         }
-
-        sem_close(sem_c);
-        sem_unlink(SEM_CANDIDATE);
 
         if (sint == 1)
-        {
             fprintf(stdout, "Finishing by signal\n");
-        }
         else
-        {
             fprintf(stdout, "Finishing by alarm\n");
-        }
 
         free(voters);
         sem_close(sem_c);
         sem_close(sem_f);
-        sem_unlink(SEM_CANDIDATE);
-        sem_unlink(SEM_FILE);
-    }
-    else
-    {
     }
 
     exit(EXIT_SUCCESS);
