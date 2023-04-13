@@ -1,0 +1,22 @@
+Ejercicio 1
+	a) Trata de crear una zona de memoria compartida. Si no lo consigue porque ya existe, la abre y si el problema era otro devuelve error. Así se puede distinguir qué proceso ha creado el segmento de memoria compartida y quién lo ha abierto.
+	Es útil para distinguir procesos, y acceder a objetos de memoria compartida ya existentes y saber si un proceso es quien ya lo.
+	b) Hacer un smh_unlink previo al intento de apertura o añadir el flag O_TRUNK (borrarlo).
+	
+Ejercicio 2
+	a) fstat(fd, &statbuf);
+	   size = statbuf.st_size;
+	b) ftruncate(fd, 5);
+
+Ejercicio 3
+	a) El contador que imprime con cada ejecución va creciendo. Esto se debe a que la información se almacena en un fichero pero lotratamos como una variable.
+	b) No, ya que se trata de un fichero binario y no de texto.
+	
+Ejercicio 4
+	a) Sí, pues tiene sentido hacerlo una vez todos los que lo vayan a usar lo hayan abierto.
+	b) No, lo normal es que quien lo crea sea quien le da el tamaño con ftruncate.
+	c) smh_open se utiliza para tratar el segmento de memoria compartida como fichero, pudiendo leerlo y escribir en él, mientras que mmap se usa para manejar el segmento como una variable.
+	d) Sí, utilizando el segmento de memoria compartida como fichero.
+
+Ejercicio 5
+	
