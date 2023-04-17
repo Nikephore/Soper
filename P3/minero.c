@@ -1,37 +1,20 @@
-#include <mqueue.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include "pow.h"
-
-#define MQ_NAME "/mq_example"
-#define MAX_MESSAGES 7
-
-typedef struct {
-    bool fin;
-    long objetivo;
-    long solucion;
-    bool correcto;
-} Dato;
+#include "common.h"
 
 void number_range_error_handler(int min, int max, int value, char *msg)
 {
 
-	if (value < min)
-	{
-		fprintf(stderr, "%s can't be lower than %d\n", msg, min);
-		exit(EXIT_FAILURE);
-	}
-	if (value > max)
-	{
-		fprintf(stderr, "%s can't be higher than %d\n", msg, max);
-		exit(EXIT_FAILURE);
-	}
+  if (value < min)
+  {
+    fprintf(stderr, "%s can't be lower than %d\n", msg, min);
+    exit(EXIT_FAILURE);
+  }
+  if (value > max)
+  {
+    fprintf(stderr, "%s can't be higher than %d\n", msg, max);
+    exit(EXIT_FAILURE);
+  }
 
-	return;
+  return;
 }
 
 /**
@@ -42,7 +25,7 @@ void number_range_error_handler(int min, int max, int value, char *msg)
  */
 long target_search(long objective)
 {
-  long result=0;
+  long result = 0;
 
   for (long i = 0; i <= POW_LIMIT; i++)
   {
@@ -59,22 +42,34 @@ long target_search(long objective)
 
 int main(int argc, char **argv)
 {
-  long target=0, solution=-1;
-  int n_cycles = 0, lag=0;
-  Dato resultado=NULL, fin=NULL;
+  long target = 0, solution = -1;
+  int n_cycles = 0, lag = 0;
+  char *strptr;
+  Dato resultado, fin;
   struct mq_attr attr;
   mqd_t queue;
 
+  attr.mq_maxmsg = MAX_MSG;
+  attr.mq_msgsize = sizeof(Dato);
 
-  attributes.mq_maxmsg = MAX_MESSAGES;
-  attributes.mq_msgsize = sizeof(Dato);
+  /* Control de errores num arguentos*/
+    if (argc != 3)
+    {
+        printf("No se ha pasado el numero correcto de argumentos\n");
+        printf("El formato correcto es:\n");
+        printf("./miner <ROUNDS> <LAG>\n");
+        printf("El lag se medira en milisegundos, maximo 10000\n");
 
-  queue = mq_open(QUEUE_NAME, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, &attr);
+        exit(EXIT_FAILURE);
+    }
+
+  /* Inicializamos la cola de mensajes */
+  queue = mq_open(MQ_NAME, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, &attr);
   if (queue == -1)
   {
     if (errno == EEXIST)
     {
-      queue = mq_open(QUEUE_NAME, O_RDWR, 0);
+      queue = mq_open(MQ_NAME, O_RDWR, 0);
       if (queue == -1)
       {
         perror("Error opening the message queue");
@@ -93,21 +88,25 @@ int main(int argc, char **argv)
     printf("Message queue created\n");
   }
 
-
-  fin.fin = TRUE;
+  /* Inicializamos los atributos del bloque final*/
+  fin.fin = true;
   fin.objetivo = -1;
   fin.solucion = -1;
-  fin.correcto = FALSE;
+  fin.correcto = false;
 
-
+  /* Formateamos argumentos de la terminal */
   n_cycles = atoi(argv[1]);
   number_range_error_handler(1, MAX_CYCLES, n_cycles, "Number of cycles");
 
-  lag = atoi(argv[2]);
-
+  lag = (unsigned int)strtoul(argv[1], &strptr, 10);
+  if (*strptr != '\0')
+  {
+    printf("Valor inválido: '%s' no es un numero\n", strptr);
+    exit(EXIT_FAILURE);
+  }
+  number_range_error_handler(MIN_LAG, MAX_LAG, lag, "Lag");
 
   fprintf(stdout, "[%d] Generating blocks...\n", getpid());
-
 
   for (int i = 0; i < n_cycles; i++)
   {
@@ -119,25 +118,28 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-    resultado.fin = FALSE;
+    resultado.fin = false;
     resultado.objetivo = target;
     resultado.solucion = solution;
-    resultado.correcto = TRUE;
+    resultado.correcto = true;
 
-    if (mq_send(queue, (Dato)resultado, sizeof(resultado), 0) == -1) {
+    printf("33\n");
+    if (mq_send(queue, (char *)&resultado, sizeof(Dato), 1) == -1)
+    {
       perror("mq_send");
       mq_close(queue);
       exit(EXIT_FAILURE);
     }
-    
+
     target = solution;
 
-    usleep(lag*1000);
+    usleep(lag * 1000);
   }
 
   /* All rounds finished, notifying the monitor */
   solution = -1;
-  if (mq_send(queue, (Dato)fin, sizeof(fin), 0) == -1) {
+  if (mq_send(queue, (char *)&fin, sizeof(Dato), 1) == -1)
+  {
     perror("mq_send");
     mq_close(queue);
     exit(EXIT_FAILURE);

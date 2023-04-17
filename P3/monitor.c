@@ -1,47 +1,4 @@
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <semaphore.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
-#include <mqueue.h>
-#include "pow.h"
-
-#define SHM_NAME "/shm_memory"
-#define QUEUE_NAME "/my_queue"
-#define SEM_FILL "/sem_fill"
-#define SEM_EMPTY "/sem_empty"
-#define SEM_MUTEX "/sem_mutex"
-
-
-#define BUFFER_SIZE 6
-#define SHM_SIZE (BUFFER_SIZE * sizeof(Dato) + sizeof(int))
-#define SHM_SIZE_STRUCT (BUFFER_SIZE * sizeof(Dato))
-
-#define MAX_MSG 7
-
-#define MIN_LAG 0
-#define MAX_LAG 10000
-
-typedef struct
-{
-    bool fin;
-    long objetivo;
-    long solucion;
-    bool correcto;
-} Dato;
-
-struct mq_attr
-{
-    long mq_flags;
-    long mq_maxmsg;
-    long mq_msgsize;
-    long mq_curmsgs;
-};
+#include "common.h"
 
 void number_range_error_handler(int min, int max, int value, char *msg)
 {
@@ -58,75 +15,99 @@ void number_range_error_handler(int min, int max, int value, char *msg)
     return;
 }
 
-void anadirElemento(Dato *bloque_shm, Dato *bloque_mq, int index)
+void anadirElemento(Dato *bloque_shm, Dato *bloque_mq)
 {
-    bloque_mq->fin = bloque_shm[index].fin;
-    bloque_mq->objetivo = bloque_shm[index].objetivo;
-    bloque_mq->solucion = bloque_shm[index].solucion;
-    bloque_mq->correcto = bloque_shm[index].correcto;
-
-    index = (index + 1) % BUFFER_SIZE;
+    bloque_shm->fin = bloque_mq->fin;
+    bloque_shm->objetivo = bloque_mq->objetivo;
+    bloque_shm->solucion = bloque_mq->solucion;
+    bloque_shm->correcto = bloque_mq->correcto;
 
     return;
 }
 
-Dato extraerElemento(Dato *bloque_shm, int index)
+Dato extraerElemento(Dato *bloque_shm)
 {
 
-    Dato ret = NULL;
+    Dato ret;
 
-    bloque_shm[index].fin = ret.fin;
-    bloque_shm[index].objetivo = ret.objetivo;
-    bloque_shm[index].solucion = ret.solucion;
-    bloque_shm[index].correcto = ret.correcto;
+    printf("Extrae bien?");
 
-    index = (index - 1) % BUFFER_SIZE;
+    ret.fin = bloque_shm->fin;
+    ret.objetivo = bloque_shm->objetivo;
+    ret.solucion = bloque_shm->solucion;
+    ret.correcto = bloque_shm->correcto;
+
+    printf("Extrae bien");
 
     return ret;
 }
 
-void monitor(int memory, int lag)
+void monitor(int memory, unsigned int lag, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
 {
     Dato *bloque_shm;
     Dato bloque_monitor;
-    int index;
+    int *front, *rear;
+
+    int value;
+
+    sem_unlink(SEM_FILL);
+    sem_unlink(SEM_EMPTY);
+    sem_unlink(SEM_MUTEX);
 
     if ((bloque_shm = mmap(NULL, SHM_SIZE_STRUCT, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
-        close(bloque_shm);
+        close(memory);
         exit(EXIT_FAILURE);
     }
 
-    if ((index = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
+    if ((front = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
-        close(index);
+        munmap(bloque_shm, SHM_SIZE_STRUCT);
+        close(memory);
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stdout, "[%d] Printing blocks", getpid());
+    if ((rear = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
+    {
+        perror("mmap");
+        munmap(bloque_shm, SHM_SIZE_STRUCT);
+        munmap(front, sizeof(int));
+        close(memory);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("[%d] Printing blocks\n", getpid());
 
     while (1)
     {
+
+        sem_getvalue(sem_fill, &value);
+        printf("valor semfill %d \n", value);
         sem_wait(sem_fill);
+        printf("SEM FILL\n");
         sem_wait(sem_mutex);
-        bloque_monitor = extraerElemento(bloque_shm, index);
+        printf("SEM mutex\n");
+        bloque_monitor = extraerElemento(&bloque_shm[*front]);
+        *(front) = (*(front) + 1) % BUFFER_SIZE;
         sem_post(sem_mutex);
         sem_post(sem_empty);
 
         /* Imprime el bloque recibido por parte del minero*/
         if (bloque_monitor.correcto == false)
-            fprintf(stdout, "Solution rejected: %08d !-> %08d\n", bloque_monitor.objetivo, bloque_monitor.solucion);
+            fprintf(stdout, "Solution rejected: %08ld !-> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
 
-        fprintf(stdout, "Solution accepted: %08d --> %08d\n", bloque_monitor.objetivo, bloque_monitor.solucion);
+        fprintf(stdout, "Solution accepted: %08ld --> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
 
         /* Comprobamos si hemos recibido el bloque de finalizacion */
         if(bloque_monitor.fin == true)
         {
-            fprintf(stdout, "[%d] Finishing", getpid());
-            close(bloque_shm);
-            close(index);
+            printf("[%d] Finishing\n", getpid());
+            close(memory);
+            munmap(bloque_shm, SHM_SIZE_STRUCT);
+            munmap(front, sizeof(int));
+            munmap(rear, sizeof(int));
             exit(EXIT_SUCCESS);
         }
 
@@ -138,85 +119,98 @@ void monitor(int memory, int lag)
     
 }
 
-void comprobador(int memory, unsigned int lag)
+void comprobador(int memory, unsigned int lag, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
 {
-
     mqd_t queue;
     Dato *bloque_shm;
     Dato bloque_mq;
-    int bytes_read = 0;
-    int index;
-    unsigned int prio = 0;
+    int *front, *rear;
+    int value;
 
+    
     if ((bloque_shm = mmap(NULL, SHM_SIZE_STRUCT, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
-        close(bloque_shm);
+        close(memory);
         exit(EXIT_FAILURE);
     }
 
-    if ((index = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
+    if ((front = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
-        close(index);
+        munmap(bloque_shm, SHM_SIZE_STRUCT);
+        close(memory);
         exit(EXIT_FAILURE);
     }
 
-    /* Abrimos la cola de mensajes, si no esta creada se crea */
-    struct mq_attr attr = {0};
-    attr.mq_maxmsg = MAX_MSG;
-    attr.mq_msgsize = sizeof(Dato);
+
+    if ((rear = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
+    {
+        perror("mmap");
+        munmap(bloque_shm, SHM_SIZE_STRUCT);
+        munmap(front, sizeof(int));
+        close(memory);
+        exit(EXIT_FAILURE);
+    }
+    *front = 0;
+    *rear = 0;
 
     /* Abrimos la cola de mensajes para leer y escribir */
     /* Si no la ha creado el minero retornamos error */
-    queue = mq_open(QUEUE_NAME, O_RDONLY, 0);
+    queue = mq_open(MQ_NAME, O_RDONLY, 0);
     if (queue == -1)
     {
         perror("Error abriendo la cola de mensajes");
-        close(bloque_shm);
-        close(index);
+        close(memory);
         exit(EXIT_FAILURE);
     }
-    printf("Abierta la cola de mensajes en el comprobador\n");
-
-    fprintf(stdout, "[%d] Checking blocks", getpid());
+    mq_unlink(MQ_NAME);
+    printf("[%d] Checking blocks\n", getpid());
 
     while (1)
     {
 
         /* Recibimos el bloque por parte del minero y lo guardamos en buffer */
-        int bytes_read = mq_receive(queue, (char *)&bloque_mq, sizeof(Dato), &prio);
-        if (bytes_read == -1)
+        if (mq_receive(queue, (char *)&bloque_mq, sizeof(Dato), NULL) == -1)
         {
             perror("mq_receive");
-            close(bloque_shm);
-            close(index);
+            close(memory);
+            munmap(bloque_shm, SHM_SIZE_STRUCT);
+            munmap(front, sizeof(int));
+            munmap(rear, sizeof(int));
             mq_close(queue);
             exit(EXIT_FAILURE);
         }
-        printf("Received message with priority %u: %s\n", priority, bloque_mq);
 
         /* Comprobamos si el bloque es correcto */
-        if (pow_hash(bloque_mq->objetivo) == bloque_mq->solucion)
+        if (pow_hash(bloque_mq.objetivo) != bloque_mq.solucion)
         {
-            bloque_mq->correcto = true;
-        }
-        bloque_mq->correcto = false;
+            bloque_mq.correcto = false;
+        } else bloque_mq.correcto = true;
+        
+        printf("bloque mq\n");
 
         /* Introducimos el bloque en memoria compartida para mandarlo al monitor */
         sem_wait(sem_empty);
         sem_wait(sem_mutex);
-        anadirElemento(bloque_shm, bloque_mq, index);
+        anadirElemento(&bloque_shm[*rear], &bloque_mq);
+        *(rear) = (*(rear) + 1) % BUFFER_SIZE;
         sem_post(sem_mutex);
         sem_post(sem_fill);
+        sem_getvalue(sem_fill, &value);
+        printf("valor semfill %d \n", value);
+
+        printf("Front: %d, Rear: %d\n", *front, *rear);
 
         /* Si era el bloque final finalizamos */
-        if (bloque_mq->fin == true)
+        if (bloque_mq.fin == true)
         {
-            close(bloque_shm);
-            close(index);
+            close(memory);
             mq_close(queue);
-            fprintf(stdout, "[%d] Finishing", getpid());
+            munmap(bloque_shm, SHM_SIZE_STRUCT);
+            munmap(front, sizeof(int));
+            munmap(rear, sizeof(int));
+            printf("[%d] Finishing\n", getpid());
             exit(EXIT_SUCCESS);
         }
 
@@ -247,7 +241,7 @@ int main(int argc, char **argv)
     lag = (unsigned int)strtoul(argv[1], &strptr, 10);
     if (*strptr != '\0')
     {
-        printf("Valor inválido: '%s' no es un numero\n", endptr);
+        printf("Valor inválido: '%s' no es un numero\n", strptr);
         exit(EXIT_FAILURE);
     }
     number_range_error_handler(MIN_LAG, MAX_LAG, lag, "Lag");
@@ -271,17 +265,13 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    sem_unlink(SEM_FILL);
-    sem_unlink(SEM_EMPTY);
-    sem_unlink(SEM_MUTEX);
-
-    memory = shm_open(SHM_NAME, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+    memory = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
     if (memory == -1)
     {
         /* Si la memoria compartida ya existe es el proceso monitor */
         if (errno == EEXIST)
         {
-            memory = shm_open(SHM_NAME, O_RDONLY, 0);
+            memory = shm_open(SHM_NAME, O_RDWR, 0);
             if (memory == -1)
             {
                 perror("Error opening the shared memory segment");
@@ -291,7 +281,7 @@ int main(int argc, char **argv)
             {
                 printf("Shared memory segment open\n");
                 shm_unlink(SHM_NAME);
-                monitor(memory, lag);
+                monitor(memory, lag, sem_fill, sem_empty, sem_mutex);
             }
         }
         else
@@ -310,7 +300,7 @@ int main(int argc, char **argv)
             close(memory);
             exit(EXIT_FAILURE);
         }
-        comprobador(memory, lag);
+        comprobador(memory, lag, sem_fill, sem_empty, sem_mutex);
     }
 
     return EXIT_SUCCESS;

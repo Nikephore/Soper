@@ -1,6 +1,8 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -pedantic -std=c99
+CFLAGS=-Wall -Wextra -pedantic 
 LDFLAGS=-lrt -lm
+
+all: monitor minero
 
 monitor: monitor.o pow.o
 	$(CC) $(LDFLAGS) $^ -o $@
@@ -8,10 +10,10 @@ monitor: monitor.o pow.o
 minero: minero.o pow.o
 	$(CC) $(LDFLAGS) $^ -o $@
 
-monitor.o: monitor.c pow.h
+monitor.o: monitor.c pow.h common.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-minero.o: minero.c pow.h
+minero.o: minero.c pow.h common.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 pow.o: pow.c pow.h
