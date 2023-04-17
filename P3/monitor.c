@@ -27,133 +27,135 @@ void anadirElemento(Dato *bloque_shm, Dato *bloque_mq)
 
 Dato extraerElemento(Dato *bloque_shm)
 {
-
     Dato ret;
-
-    printf("Extrae bien?");
 
     ret.fin = bloque_shm->fin;
     ret.objetivo = bloque_shm->objetivo;
     ret.solucion = bloque_shm->solucion;
     ret.correcto = bloque_shm->correcto;
 
-    printf("Extrae bien");
-
     return ret;
 }
 
-void monitor(int memory, unsigned int lag, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
+void monitor(int memory, unsigned int lag)
 {
-    Dato *bloque_shm;
+    Bloque *bloque_shm;
     Dato bloque_monitor;
-    int *front, *rear;
+    sem_t *sem_fill = NULL, *sem_empty = NULL, *sem_mutex = NULL;
 
-    int value;
+    /* Abrimos los semaforos a utilizar de cara al manejo de la memoria compartida */
+    if ((sem_fill = sem_open(SEM_FILL, O_CREAT, S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+
+    if ((sem_empty = sem_open(SEM_EMPTY, O_CREAT, S_IRUSR | S_IWUSR, BUFFER_SIZE)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        sem_close(sem_fill);
+        exit(EXIT_FAILURE);
+    }
+
+    if ((sem_mutex = sem_open(SEM_MUTEX, O_CREAT, S_IRUSR | S_IWUSR, 1)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        sem_close(sem_fill);
+        sem_close(sem_empty);
+        exit(EXIT_FAILURE);
+    }
 
     sem_unlink(SEM_FILL);
     sem_unlink(SEM_EMPTY);
     sem_unlink(SEM_MUTEX);
 
-    if ((bloque_shm = mmap(NULL, SHM_SIZE_STRUCT, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
+    if ((bloque_shm = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
         close(memory);
+        sem_close(sem_fill);
+        sem_close(sem_empty);
+        sem_close(sem_mutex);
         exit(EXIT_FAILURE);
     }
 
-    if ((front = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
-    {
-        perror("mmap");
-        munmap(bloque_shm, SHM_SIZE_STRUCT);
-        close(memory);
-        exit(EXIT_FAILURE);
-    }
-
-    if ((rear = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
-    {
-        perror("mmap");
-        munmap(bloque_shm, SHM_SIZE_STRUCT);
-        munmap(front, sizeof(int));
-        close(memory);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("[%d] Printing blocks\n", getpid());
+    printf("[%d] Printing blocks...\n", getpid());
 
     while (1)
     {
 
-        sem_getvalue(sem_fill, &value);
-        printf("valor semfill %d \n", value);
         sem_wait(sem_fill);
-        printf("SEM FILL\n");
         sem_wait(sem_mutex);
-        printf("SEM mutex\n");
-        bloque_monitor = extraerElemento(&bloque_shm[*front]);
-        *(front) = (*(front) + 1) % BUFFER_SIZE;
+        bloque_monitor = extraerElemento(&bloque_shm->bloque[bloque_shm->front]);
+        bloque_shm->front = (bloque_shm->front + 1) % BUFFER_SIZE;
         sem_post(sem_mutex);
         sem_post(sem_empty);
-
-        /* Imprime el bloque recibido por parte del minero*/
-        if (bloque_monitor.correcto == false)
-            fprintf(stdout, "Solution rejected: %08ld !-> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
-
-        fprintf(stdout, "Solution accepted: %08ld --> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
 
         /* Comprobamos si hemos recibido el bloque de finalizacion */
         if(bloque_monitor.fin == true)
         {
             printf("[%d] Finishing\n", getpid());
             close(memory);
-            munmap(bloque_shm, SHM_SIZE_STRUCT);
-            munmap(front, sizeof(int));
-            munmap(rear, sizeof(int));
+            munmap(bloque_shm, SHM_SIZE);
+            sem_close(sem_fill);
+            sem_close(sem_empty);
+            sem_close(sem_mutex);
             exit(EXIT_SUCCESS);
         }
+
+        /* Imprime el bloque recibido por parte del minero*/
+        if (bloque_monitor.correcto == false)
+            printf("Solution rejected: %08ld !-> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
+        else
+            printf("Solution accepted: %08ld --> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
+
 
         /*Realizamos espera de <LAG> milisegundos*/
         usleep(lag * 1000);
     }
-    
-
-    
 }
 
-void comprobador(int memory, unsigned int lag, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
+void comprobador(int memory, unsigned int lag)
 {
     mqd_t queue;
-    Dato *bloque_shm;
+    Bloque *bloque_shm;
     Dato bloque_mq;
-    int *front, *rear;
-    int value;
+    sem_t *sem_fill = NULL, *sem_empty = NULL, *sem_mutex = NULL;
+
+    /* Abrimos los semaforos a utilizar de cara al manejo de la memoria compartida */
+    if ((sem_fill = sem_open(SEM_FILL, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+
+    if ((sem_empty = sem_open(SEM_EMPTY, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, BUFFER_SIZE)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        sem_close(sem_fill);
+        exit(EXIT_FAILURE);
+    }
+
+    if ((sem_mutex = sem_open(SEM_MUTEX, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 1)) == SEM_FAILED)
+    {
+        perror("sem_open");
+        sem_close(sem_fill);
+        sem_close(sem_empty);
+        exit(EXIT_FAILURE);
+    }
 
     
-    if ((bloque_shm = mmap(NULL, SHM_SIZE_STRUCT, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
+    if ((bloque_shm = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
         close(memory);
+        sem_close(sem_fill);
+        sem_close(sem_empty);
+        sem_close(sem_mutex);
         exit(EXIT_FAILURE);
     }
-
-    if ((front = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
-    {
-        perror("mmap");
-        munmap(bloque_shm, SHM_SIZE_STRUCT);
-        close(memory);
-        exit(EXIT_FAILURE);
-    }
-
-
-    if ((rear = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
-    {
-        perror("mmap");
-        munmap(bloque_shm, SHM_SIZE_STRUCT);
-        munmap(front, sizeof(int));
-        close(memory);
-        exit(EXIT_FAILURE);
-    }
-    *front = 0;
-    *rear = 0;
+    bloque_shm->front = 0;
+    bloque_shm->rear = 0;
 
     /* Abrimos la cola de mensajes para leer y escribir */
     /* Si no la ha creado el minero retornamos error */
@@ -165,7 +167,7 @@ void comprobador(int memory, unsigned int lag, sem_t *sem_fill, sem_t *sem_empty
         exit(EXIT_FAILURE);
     }
     mq_unlink(MQ_NAME);
-    printf("[%d] Checking blocks\n", getpid());
+    printf("[%d] Checking blocks...\n", getpid());
 
     while (1)
     {
@@ -175,41 +177,34 @@ void comprobador(int memory, unsigned int lag, sem_t *sem_fill, sem_t *sem_empty
         {
             perror("mq_receive");
             close(memory);
-            munmap(bloque_shm, SHM_SIZE_STRUCT);
-            munmap(front, sizeof(int));
-            munmap(rear, sizeof(int));
+            munmap(bloque_shm, SHM_SIZE);
             mq_close(queue);
             exit(EXIT_FAILURE);
         }
 
         /* Comprobamos si el bloque es correcto */
-        if (pow_hash(bloque_mq.objetivo) != bloque_mq.solucion)
+        if (pow_hash(bloque_mq.solucion) != bloque_mq.objetivo)
         {
             bloque_mq.correcto = false;
         } else bloque_mq.correcto = true;
-        
-        printf("bloque mq\n");
 
         /* Introducimos el bloque en memoria compartida para mandarlo al monitor */
         sem_wait(sem_empty);
         sem_wait(sem_mutex);
-        anadirElemento(&bloque_shm[*rear], &bloque_mq);
-        *(rear) = (*(rear) + 1) % BUFFER_SIZE;
+        anadirElemento(&bloque_shm->bloque[bloque_shm->rear], &bloque_mq);
+        bloque_shm->rear = (bloque_shm->rear + 1) % BUFFER_SIZE;
         sem_post(sem_mutex);
         sem_post(sem_fill);
-        sem_getvalue(sem_fill, &value);
-        printf("valor semfill %d \n", value);
-
-        printf("Front: %d, Rear: %d\n", *front, *rear);
 
         /* Si era el bloque final finalizamos */
         if (bloque_mq.fin == true)
         {
             close(memory);
             mq_close(queue);
-            munmap(bloque_shm, SHM_SIZE_STRUCT);
-            munmap(front, sizeof(int));
-            munmap(rear, sizeof(int));
+            munmap(bloque_shm, SHM_SIZE);
+            sem_close(sem_fill);
+            sem_close(sem_empty);
+            sem_close(sem_mutex);
             printf("[%d] Finishing\n", getpid());
             exit(EXIT_SUCCESS);
         }
@@ -224,7 +219,6 @@ int main(int argc, char **argv)
     int memory = 0;
     unsigned int lag;
     char *strptr;
-    sem_t *sem_fill = NULL, *sem_empty = NULL, *sem_mutex = NULL;
 
     /* Control de errores num arguentos*/
     if (argc != 2)
@@ -246,24 +240,7 @@ int main(int argc, char **argv)
     }
     number_range_error_handler(MIN_LAG, MAX_LAG, lag, "Lag");
 
-    /* Abrimos los semaforos a utilizar de cara al manejo de la memoria compartida */
-    if ((sem_fill = sem_open(SEM_FILL, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
-    {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
-
-    if ((sem_empty = sem_open(SEM_EMPTY, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, BUFFER_SIZE)) == SEM_FAILED)
-    {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
-
-    if ((sem_mutex = sem_open(SEM_MUTEX, O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, 1)) == SEM_FAILED)
-    {
-        perror("sem_open");
-        exit(EXIT_FAILURE);
-    }
+    
 
     memory = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
     if (memory == -1)
@@ -279,9 +256,8 @@ int main(int argc, char **argv)
             }
             else
             {
-                printf("Shared memory segment open\n");
                 shm_unlink(SHM_NAME);
-                monitor(memory, lag, sem_fill, sem_empty, sem_mutex);
+                monitor(memory, lag);
             }
         }
         else
@@ -293,14 +269,13 @@ int main(int argc, char **argv)
     else
     {
         /* Si la memoria compartida no existe la crea y se convierte en el comprobador */
-        printf("Shared memory segment created\n");
         if (ftruncate(memory, SHM_SIZE) == -1)
         {
             perror("ftruncate");
             close(memory);
             exit(EXIT_FAILURE);
         }
-        comprobador(memory, lag, sem_fill, sem_empty, sem_mutex);
+        comprobador(memory, lag);
     }
 
     return EXIT_SUCCESS;

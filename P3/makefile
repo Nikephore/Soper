@@ -20,4 +20,4 @@ pow.o: pow.c pow.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f monitor minero *.o
+	rm -f monitor minero pow *.o

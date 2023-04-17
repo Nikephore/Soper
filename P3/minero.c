@@ -51,20 +51,21 @@ int main(int argc, char **argv)
 
   attr.mq_maxmsg = MAX_MSG;
   attr.mq_msgsize = sizeof(Dato);
+  attr.mq_curmsgs = 0;
 
   /* Control de errores num arguentos*/
-    if (argc != 3)
-    {
-        printf("No se ha pasado el numero correcto de argumentos\n");
-        printf("El formato correcto es:\n");
-        printf("./miner <ROUNDS> <LAG>\n");
-        printf("El lag se medira en milisegundos, maximo 10000\n");
+  if (argc != 3)
+  {
+    printf("No se ha pasado el numero correcto de argumentos\n");
+    printf("El formato correcto es:\n");
+    printf("./miner <ROUNDS> <LAG>\n");
+    printf("El lag se medira en milisegundos, maximo 10000\n");
 
-        exit(EXIT_FAILURE);
-    }
+    exit(EXIT_FAILURE);
+  }
 
   /* Inicializamos la cola de mensajes */
-  queue = mq_open(MQ_NAME, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, &attr);
+  queue = mq_open(MQ_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, &attr);
   if (queue == -1)
   {
     if (errno == EEXIST)
@@ -83,11 +84,6 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  else
-  {
-    printf("Message queue created\n");
-  }
-
   /* Inicializamos los atributos del bloque final*/
   fin.fin = true;
   fin.objetivo = -1;
@@ -106,7 +102,7 @@ int main(int argc, char **argv)
   }
   number_range_error_handler(MIN_LAG, MAX_LAG, lag, "Lag");
 
-  fprintf(stdout, "[%d] Generating blocks...\n", getpid());
+  printf("[%d] Generating blocks...\n", getpid());
 
   for (int i = 0; i < n_cycles; i++)
   {
@@ -123,7 +119,6 @@ int main(int argc, char **argv)
     resultado.solucion = solution;
     resultado.correcto = true;
 
-    printf("33\n");
     if (mq_send(queue, (char *)&resultado, sizeof(Dato), 1) == -1)
     {
       perror("mq_send");
@@ -147,7 +142,7 @@ int main(int argc, char **argv)
 
   mq_close(queue);
 
-  fprintf(stdout, "Finishing\n");
+  printf("[%d] Finishing\n", getpid());
 
   return EXIT_SUCCESS;
 }

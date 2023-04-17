@@ -21,8 +21,7 @@
 
 
 #define BUFFER_SIZE 6
-#define SHM_SIZE (BUFFER_SIZE * sizeof(Dato) + sizeof(int))
-#define SHM_SIZE_STRUCT (BUFFER_SIZE * sizeof(Dato))
+#define SHM_SIZE (sizeof(Bloque))
 
 #define MAX_MSG 7
 #define MAX_CYCLES 200
@@ -36,3 +35,10 @@ typedef struct
     long solucion;
     bool correcto;
 } Dato;
+
+typedef struct
+{
+    Dato bloque[BUFFER_SIZE];
+    int front;
+    int rear;
+}Bloque;
