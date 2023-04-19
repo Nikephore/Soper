@@ -25,6 +25,7 @@ void anadirElemento(Dato *bloque_shm, Dato *bloque_mq)
     return;
 }
 
+/*
 Dato extraerElemento(Dato *bloque_shm)
 {
     Dato ret;
@@ -36,8 +37,35 @@ Dato extraerElemento(Dato *bloque_shm)
 
     return ret;
 }
+*/
 
-void monitor(int memory, unsigned int lag)
+
+void imprimir_bloque(Bloque bloque)
+{
+    int i = 0;
+
+    printf("Id:\t\t%04d\n", bloque.id);
+    printf("Winner:\t%d\n",bloque.ganador);
+    printf("Target:\t%ld\n",bloque.objetivo);
+    printf("Solution:\t%ld ",bloque.solucion);
+    if(bloque.votos_positivos >= ceil(bloque.votos_totales/2))
+        printf("(validated)\n");
+    else
+        printf(("rejected)\n"));
+    printf("Votes:\t%d/%d\n", bloque.votos_positivos, bloque.votos_totales)
+    printf("Wallets:\t");
+
+    while(bloque.carteras[i])
+    {
+        printf("%d:%02d\t", bloque.carteras[i].id_proceso, bloque.carteras[i].monedas);
+        i++;
+    }
+    printf("\n")
+}
+
+
+
+void monitor(int memory)
 {
     Bloque *bloque_shm;
     Dato bloque_monitor;
@@ -104,14 +132,8 @@ void monitor(int memory, unsigned int lag)
         }
 
         /* Imprime el bloque recibido por parte del minero*/
-        if (bloque_monitor.correcto == false)
-            printf("Solution rejected: %08ld !-> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
-        else
-            printf("Solution accepted: %08ld --> %08ld\n", bloque_monitor.objetivo, bloque_monitor.solucion);
+        imprimir_bloque(bloque);
 
-
-        /*Realizamos espera de <LAG> milisegundos*/
-        usleep(lag * 1000);
     }
 }
 
@@ -217,53 +239,20 @@ void comprobador(int memory, unsigned int lag)
 int main(int argc, char **argv)
 {
     int memory = 0;
-    unsigned int lag;
     char *strptr;
 
-    /* Control de errores num arguentos*/
-    if (argc != 2)
-    {
-        printf("No se ha pasado el numero correcto de argumentos\n");
-        printf("El formato correcto es:\n");
-        printf("./monitor <LAG>\n");
-        printf("El lag se medira en milisegundos, maximo 10000\n");
 
-        exit(EXIT_FAILURE);
-    }
-
-    /* comprobamos que se nos ha pasado un numero como argumento */
-    lag = (unsigned int)strtoul(argv[1], &strptr, 10);
-    if (*strptr != '\0')
-    {
-        printf("Valor inválido: '%s' no es un numero\n", strptr);
-        exit(EXIT_FAILURE);
-    }
-    number_range_error_handler(MIN_LAG, MAX_LAG, lag, "Lag");
 
     
-
     memory = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
     if (memory == -1)
     {
         /* Si la memoria compartida ya existe es el proceso monitor */
         if (errno == EEXIST)
         {
-            memory = shm_open(SHM_NAME, O_RDWR, 0);
-            if (memory == -1)
-            {
-                perror("Error opening the shared memory segment");
-                exit(EXIT_FAILURE);
-            }
-            else
-            {
-                shm_unlink(SHM_NAME);
-                monitor(memory, lag);
-            }
-        }
-        else
-        {
-            perror("Error creating the shared memory segment\n");
-            exit(EXIT_FAILURE);
+            perror("shm_open");
+            close(memory);
+            shm_unlink(SHM_NAME);
         }
     }
     else

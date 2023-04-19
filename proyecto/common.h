@@ -21,24 +21,58 @@
 
 
 #define BUFFER_SIZE 6
-#define SHM_SIZE (sizeof(Bloque))
+#define SHM_SIZE (sizeof(Memoria))
 
 #define MAX_MSG 7
 #define MAX_CYCLES 200
 #define MIN_LAG 0
 #define MAX_LAG 10000
 
+/**
+ * estructura de la cartera de un minero. 
+ * Contiene su PID y sus monedas obtenidas.
+*/
 typedef struct
 {
-    bool fin;
+    pid_t id_proceso;
+    unsigned int monedas;
+} Cartera;
+
+/**
+ * Estructura de un bloque de minado.
+*/
+typedef struct
+{
+    int id;
     long objetivo;
     long solucion;
-    bool correcto;
-} Dato;
+    pid_t ganador;
+    Cartera *carteras;
+    unsigned int votos_totales;
+    unsigned int votos_positivos;
+} Bloque;
 
+
+/**
+ * Estructura de datos que se guardarán
+ * en la memoria compartida.
+*/
 typedef struct
 {
-    Dato bloque[BUFFER_SIZE];
-    int front;
-    int rear;
-}Bloque;
+    pid_t *mineros;
+    bool *votos;
+    Cartera *carteras; /* Podria ser un array de ints, ver si hay que cambiar */
+    Bloque bl_ultimo;
+    Bloque bl_actual;
+} Memoria;
+
+
+/**
+ * @brief Check if the argument given is in a specific and valid range.
+ *
+ * @param min   Minimum number posible of the value.
+ * @param max   Maximum number posible of the value.
+ * @param value Value to check.
+ * @param msg   Message to print with an identificative name of the variable.
+ */
+void number_range_error_handler(int min, int max, int value, char *msg);
