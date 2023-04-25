@@ -25,8 +25,7 @@
 
 #define MAX_MSG 7
 #define MAX_CYCLES 200
-#define MIN_LAG 0
-#define MAX_LAG 10000
+#define MAX_MINERS 100
 
 /**
  * estructura de la cartera de un minero. 
@@ -61,7 +60,7 @@ typedef struct
 {
     pid_t *mineros;
     bool *votos;
-    Cartera *carteras; /* Podria ser un array de ints, ver si hay que cambiar */
+    int *monedas;
     Bloque bl_ultimo;
     Bloque bl_actual;
 } Memoria;
