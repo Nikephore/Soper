@@ -45,9 +45,10 @@ int main(int argc, char **argv)
   char *fichero;
 
   /* Variables de memoria compartida */
-  Memoria *mem;
+  MemoriaMinero *mem;
   Bloque b_actual;
   Bloque b_ultimo;
+  Bloque fin;
   Cartera *carteras_mineros;
 
   /* Variables de vbloque */
@@ -67,7 +68,7 @@ int main(int argc, char **argv)
   mqd_t queue;
 
   attr.mq_maxmsg = MAX_MSG;
-  attr.mq_msgsize = sizeof(Dato);
+  attr.mq_msgsize = sizeof(Bloque);
   attr.mq_curmsgs = 0;
 
   /* Control de errores num arguentos*/
@@ -81,26 +82,6 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  /* Inicializamos la cola de mensajes */
-  queue = mq_open(MQ_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, &attr);
-  if (queue == -1)
-  {
-    if (errno == EEXIST)
-    {
-      queue = mq_open(MQ_NAME, O_RDWR, 0);
-      if (queue == -1)
-      {
-        perror("Error opening the message queue");
-        exit(EXIT_FAILURE);
-      }
-      printf("Message queue opened\n");
-    }
-    else
-    {
-      perror("Error creating the message queue\n");
-      exit(EXIT_FAILURE);
-    }
-  }
   /* Inicializamos los atributos del bloque final*/
   fin.fin = true;
   fin.objetivo = -1;
@@ -108,7 +89,7 @@ int main(int argc, char **argv)
   fin.correcto = false;
 
   /* Formateamos argumentos de la terminal */
-  n_cycles = atoi(argv[1]);
+  n_seconds = atoi(argv[1]);
   number_range_error_handler(1, MAX_SECONDS, n_seconds, "Number of seconds");
 
   n_threads = atoi(argv[2]);
@@ -117,8 +98,6 @@ int main(int argc, char **argv)
   /* [0] is to Read | [1] is to Write */
   pipe_status = pipe(minero_a_registrador);
   pipe_error_handler(pipe_status);
-
-  printf("[%d] Soy el proceso Minero...\n", getpid());
 
   minero_pid = fork();
   pid_error_handler(minero_pid);
@@ -179,6 +158,26 @@ int main(int argc, char **argv)
   }
   else /* Es el proceso Minero */
   {
+    /* Inicializamos la cola de mensajes */
+    queue = mq_open(MQ_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, &attr);
+    if (queue == -1)
+    {
+      if (errno == EEXIST)
+      {
+        queue = mq_open(MQ_NAME, O_RDWR, 0);
+        if (queue == -1)
+        {
+          perror("Error opening the message queue");
+          exit(EXIT_FAILURE);
+        }
+        printf("Message queue opened\n");
+      }
+      else
+      {
+        perror("Error creating the message queue\n");
+        exit(EXIT_FAILURE);
+      }
+    }
     /* Cierra el extremo de lectura del minero */
     close(minero_a_registrador[0]);
 
@@ -208,14 +207,14 @@ int main(int argc, char **argv)
     {
       /* Es el primer minero y hace los preparativos necesarios */
 
-      if (ftruncate(memoria, SHM_SIZE) == -1)
+      if (ftruncate(mem, SHM_SIZE_MINERO) == -1)
       {
         perror("ftruncate");
-        close(memoria);
+        close(mem);
         exit(EXIT_FAILURE);
       }
 
-      mem = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, memoria, 0);
+      mem = mmap(NULL, SHM_SIZE_MINERO, PROT_READ | PROT_WRITE, MAP_SHARED, mem, 0);
       mem->mineros = NULL;
       mem->votos = NULL;
       mem->monedas = NULL;

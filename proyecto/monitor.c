@@ -51,7 +51,7 @@ void imprimir_bloque(Bloque bloque)
     printf("Winner:\t%d\n",bloque.ganador);
     printf("Target:\t%ld\n",bloque.objetivo);
     printf("Solution:\t%ld ",bloque.solucion);
-    if(bloque.votos_positivos >= ceil(bloque.votos_totales/2))
+    if(bloque.correcto == true)
         printf("(validated)\n");
     else
         printf(("rejected)\n"));

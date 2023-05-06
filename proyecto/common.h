@@ -27,7 +27,7 @@
 
 #define MAX_MSG 7
 #define MAX_CYCLES 200
-#define MAX_MINERS 100
+#define MAX_MINERS 1
 
 /**
  * estructura de la cartera de un minero. 
@@ -62,9 +62,8 @@ typedef struct
 */
 typedef struct
 {
-    pid_t *mineros;
+    Cartera *carteras;
     bool *votos;
-    int *monedas;
     Bloque bl_ultimo;
     Bloque bl_actual;
 
