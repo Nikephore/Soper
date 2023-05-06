@@ -41,4 +41,8 @@ typedef struct
     Dato bloque[BUFFER_SIZE];
     int front;
     int rear;
-}Bloque;
+    sem_t sem_fill;
+    sem_t sem_empty;
+    sem_t sem_mutex;
+} Bloque;
+

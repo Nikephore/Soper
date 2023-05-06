@@ -126,6 +126,8 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
 
+    printf("Enviado bloque\n");
+
     target = solution;
 
     usleep(lag * 1000);

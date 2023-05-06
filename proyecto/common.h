@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -20,7 +21,7 @@
 #define SEM_MUTEX "/sem_mutex"
 
 
-#define BUFFER_SIZE 6
+#define BUFFER_SIZE 5
 #define SHM_SIZE (sizeof(Memoria))
 
 #define MAX_MSG 7
@@ -63,6 +64,10 @@ typedef struct
     int *monedas;
     Bloque bl_ultimo;
     Bloque bl_actual;
+    sem_t sem_empty;
+    sem_t sem_fill;
+    sem_t sem_mutex;
+
 } Memoria;
 
 
@@ -75,3 +80,11 @@ typedef struct
  * @param msg   Message to print with an identificative name of the variable.
  */
 void number_range_error_handler(int min, int max, int value, char *msg);
+
+
+/**
+ * @brief Check if the argument given is a correct pid.
+ *
+ * @param pid   Process id to check.
+ */
+void pid_error_handler(pid_t pid);

@@ -14,3 +14,13 @@ void number_range_error_handler(int min, int max, int value, char *msg)
     }
     return;
 }
+
+void pid_error_handler(pid_t pid)
+{
+	if (pid < 0)
+	{
+		perror("fork");
+		exit(EXIT_FAILURE);
+	}
+	return;
+}

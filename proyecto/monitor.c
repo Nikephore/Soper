@@ -39,7 +39,6 @@ Dato extraerElemento(Dato *bloque_shm)
 }
 */
 
-
 void imprimir_bloque(Bloque bloque)
 {
     int i = 0;
@@ -60,7 +59,7 @@ void imprimir_bloque(Bloque bloque)
         printf("%d:%02d\t", bloque.carteras[i].id_proceso, bloque.carteras[i].monedas);
         i++;
     }
-    printf("\n")
+    printf("\n");
 }
 
 
@@ -137,7 +136,7 @@ void monitor(int memory)
     }
 }
 
-void comprobador(int memory, unsigned int lag)
+void comprobador(int memory)
 {
     mqd_t queue;
     Bloque *bloque_shm;
@@ -231,40 +230,47 @@ void comprobador(int memory, unsigned int lag)
             exit(EXIT_SUCCESS);
         }
 
-        /*Realizamos espera de <LAG> milisegundos*/
-        usleep(lag * 1000);
     }
 }
 
 int main(int argc, char **argv)
 {
     int memory = 0;
+    pid_t comprobador_pid;
     char *strptr;
 
-
-
-    
     memory = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
     if (memory == -1)
     {
-        /* Si la memoria compartida ya existe es el proceso monitor */
         if (errno == EEXIST)
         {
             perror("shm_open");
             close(memory);
-            shm_unlink(SHM_NAME);
+            shm_unlink(SHM_NAME); 
         }
+        exit(EXIT_FAILURE);
     }
     else
     {
-        /* Si la memoria compartida no existe la crea y se convierte en el comprobador */
+        shm_unlink(SHM_NAME); 
         if (ftruncate(memory, SHM_SIZE) == -1)
         {
             perror("ftruncate");
             close(memory);
             exit(EXIT_FAILURE);
         }
-        comprobador(memory, lag);
+    }
+
+    comprobador_pid = fork();
+    pid_error_handler(comprobador_pid);
+
+    if(comprobador_pid == 0) /* Proceso monitor */
+    {
+        monitor(memory);
+    }
+    else /* Proceso comprobador */
+    {
+        comprobador(memory);
     }
 
     return EXIT_SUCCESS;
