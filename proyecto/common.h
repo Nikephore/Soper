@@ -27,7 +27,7 @@
 
 #define MAX_MSG 7
 #define MAX_CYCLES 200
-#define MAX_MINERS 1
+#define MAX_MINEROS 1
 
 /**
  * estructura de la cartera de un minero. 
@@ -58,7 +58,7 @@ typedef struct
 
 /**
  * Estructura de datos que se guardarán
- * en la memoria compartida.
+ * en la memoria compartida de los mineros.
 */
 typedef struct
 {
@@ -66,9 +66,15 @@ typedef struct
     bool *votos;
     Bloque bl_ultimo;
     Bloque bl_actual;
+    int num_mineros;
 
 } MemoriaMinero;
 
+/**
+ * Estructura de datos que se guardarán
+ * en la memoria compartida entre monitor
+ * y comprobador.
+*/
 typedef struct
 {
     Bloque bloque[BUFFER_SIZE];
@@ -77,7 +83,13 @@ typedef struct
 
 } MemoriaMonitor;
 
-
+typedef struct
+{
+  int min;
+  int max;
+  long objetivo;
+  long solution;
+} Busqueda;
 
 
 /**

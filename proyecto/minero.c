@@ -17,18 +17,18 @@ void pipe_error_handler(int pipe_status)
 /**
  * @brief Search the correct value of the pow function between a specified range.
  *
- * @param objective Pointer to structure with the range values and the target to search.
+ * @param objetivo Pointer to structure with the range values and the target to search.
  * @return Exit of the thread.
  */
-long target_search(long objective)
+long target_search(long objetivo)
 {
-  long result = 0;
+  long solucion = 0;
 
   for (long i = 0; i <= POW_LIMIT; i++)
   {
 
     result = pow_hash(i);
-    if (result == objective)
+    if (result == objetivo)
     {
       return i;
     }
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
   Bloque fin;
   Cartera *carteras_mineros;
 
-  /* Variables de vbloque */
+  /* Variables de bloque */
   long target = 0, solution = -1;
 
   /* Variables de terminal */
@@ -200,13 +200,27 @@ int main(int argc, char **argv)
         else
         {
           shm_unlink(SHM_NAME);
+          /* Realizamos el mapeo de la memoria y de los punteros de la estructura */
+          mem = mmap(NULL, SHM_SIZE_MINERO, PROT_READ | PROT_WRITE, MAP_SHARED, mem, 0);
+          mem->carteras = mmap(NULL, sizeof(Cartera) * MAX_MINEROS, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+          mem->votos = mmap(NULL, sizeof(bool) * MAX_MINEROS, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+
+          if (mem->num_mineros == MAX_MINEROS - 1)
+          {
+            munmap(mem->carteras, sizeof(Cartera) * MAX_MINEROS);
+            munmap(mem->votos, sizeof(bool) * MAX_MINEROS);
+            munmap(mem, SHM_SIZE_MINERO);
+          }
+
+          mem->num_mineros++;
+
+          manage_threads(n_threads, mem->bl_actual.objetivo);
         }
       }
     }
     else
     {
       /* Es el primer minero y hace los preparativos necesarios */
-
       if (ftruncate(mem, SHM_SIZE_MINERO) == -1)
       {
         perror("ftruncate");
@@ -214,16 +228,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
       }
 
-      mem = mmap(NULL, SHM_SIZE_MINERO, PROT_READ | PROT_WRITE, MAP_SHARED, mem, 0);
-      mem->mineros = NULL;
-      mem->votos = NULL;
-      mem->monedas = NULL;
-
-      carteras_mineros = calloc(1, sizeof(Cartera)) if (carteras_mineros == NULL)
-      {
-        printf("Error al asignar memoria a las carteras\n");
-        return EXIT_FAILURE;
-      }
+      mem->num_mineros = 1;
 
       /* Inicializacion del bloque ultimo */
       b_ultimo.votos_positivos = 0;
@@ -231,16 +236,18 @@ int main(int argc, char **argv)
       b_ultimo.objetivo = -1;
       b_ultimo.solucion = -1;
       b_ultimo.id = -1;
-      b_ultimo.carteras = NULL;
+      b_actual.carteras[0].id_proceso = getpid();
+      b_actual.carteras[0].monedas = 0;
       mem->bl_ultimo = b_ultimo;
 
       /* Inicializacion del primer bloque de minado */
       b_actual.votos_positivos = 0;
       b_actual.votos_totales = 0;
-      b_actual.objetivo = -1;
+      b_actual.objetivo = 0;
       b_actual.solucion = -1;
-      b_actual.id = -1;
-      b_actual.carteras = NULL;
+      b_actual.id = 1;
+      b_actual.carteras[0].id_proceso = getpid();
+      b_actual.carteras[0].monedas = 0;
       mem->bl_actual = b_actual;
     }
   }
@@ -257,9 +264,7 @@ int main(int argc, char **argv)
     int solution = -1;
     int error;
     pthread_t *threads;
-    search objective[n_threads];
-
-    target_found = NOTFOUND;
+    Busqueda objetivo[n_threads];
 
     if (!(threads = (pthread_t *)calloc(sizeof(pthread_t), n_threads)))
     {
@@ -270,11 +275,11 @@ int main(int argc, char **argv)
     for (int i = 0; i < n_threads; i++)
     {
       /* Establish the search range of the trhead and the target */
-      objective[i].min = POW_LIMIT / n_threads * i;
-      objective[i].max = (POW_LIMIT / n_threads * (i + 1)) - 1;
-      objective[i].target = target;
-      objective[i].solution = -1;
-      error = pthread_create(&threads[i], NULL, target_search, &objective[i]);
+      objetivo[i].min = (int)((POW_LIMIT / (double)n_threads) * i);
+      objetivo[i].max = (int)(((POW_LIMIT / (double)n_threads) * (i + 1)) - 1);
+      objetivo[i].objetivo = objetivo;
+      objetivo[i].solucion = -1;
+      error = pthread_create(&threads[i], NULL, target_search, &objetivo[i]);
       if (error != 0)
       {
         fprintf(stderr, "pthread_create: %s\n", strerror(error));
@@ -291,9 +296,9 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
       }
 
-      if (objective[i].solution != -1)
+      if (objetivo[i].solution != -1)
       {
-        solution = objective[i].solution;
+        solution = objetivo[i].solution;
       }
     }
 
@@ -301,6 +306,7 @@ int main(int argc, char **argv)
 
     return solution;
   }
+
 
   for (int i = 0; i < n_cycles; i++)
   {
