@@ -14,15 +14,16 @@
 #include <mqueue.h>
 #include "pow.h"
 
-#define SHM_NAME "/shm_memory"
+#define SHM_MONITOR "/shm_monitor"
+#define SHM_MINERO "/shm_minero"
 #define MQ_NAME "/mq_example"
-#define SEM_FILL "/sem_fill"
-#define SEM_EMPTY "/sem_empty"
+
+
 #define SEM_MUTEX "/sem_mutex"
 
-
 #define BUFFER_SIZE 5
-#define SHM_SIZE (sizeof(Memoria))
+#define SHM_SIZE_MINERO (sizeof(MemoriaMinero))
+#define SHM_SIZE_MONITOR (sizeof(MemoriaMonitor))
 
 #define MAX_MSG 7
 #define MAX_CYCLES 200
@@ -50,6 +51,8 @@ typedef struct
     Cartera *carteras;
     unsigned int votos_totales;
     unsigned int votos_positivos;
+    bool correcto;
+    bool fin;
 } Bloque;
 
 
@@ -64,11 +67,18 @@ typedef struct
     int *monedas;
     Bloque bl_ultimo;
     Bloque bl_actual;
-    sem_t sem_empty;
-    sem_t sem_fill;
-    sem_t sem_mutex;
 
-} Memoria;
+} MemoriaMinero;
+
+typedef struct
+{
+    Bloque bloque[BUFFER_SIZE];
+    int front;
+    int rear;
+
+} MemoriaMonitor;
+
+
 
 
 /**
