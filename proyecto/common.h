@@ -3,10 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <semaphore.h>
+#include <math.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
@@ -18,16 +21,21 @@
 #define SHM_MINERO "/shm_minero"
 #define MQ_NAME "/mq_example"
 
-
+#define SEM_FILL "/sem_fill"
+#define SEM_EMPTY "/sem_empty"
 #define SEM_MUTEX "/sem_mutex"
 
 #define BUFFER_SIZE 5
 #define SHM_SIZE_MINERO (sizeof(MemoriaMinero))
 #define SHM_SIZE_MONITOR (sizeof(MemoriaMonitor))
 
-#define MAX_MSG 7
+#define MAX_MSG 10
 #define MAX_CYCLES 200
-#define MAX_MINEROS 1
+#define MAX_MINEROS 50
+#define MAX_FILE_SIZE 20
+
+#define FOUND 0
+#define NOT_FOUND -1
 
 /**
  * estructura de la cartera de un minero. 
@@ -48,7 +56,7 @@ typedef struct
     long objetivo;
     long solucion;
     pid_t ganador;
-    Cartera *carteras;
+    Cartera carteras[MAX_MINEROS];
     unsigned int votos_totales;
     unsigned int votos_positivos;
     bool correcto;
@@ -62,8 +70,8 @@ typedef struct
 */
 typedef struct
 {
-    Cartera *carteras;
-    bool *votos;
+    Cartera carteras[MAX_MINEROS];
+    bool votos[MAX_MINEROS];
     Bloque bl_ultimo;
     Bloque bl_actual;
     int num_mineros;
@@ -88,7 +96,7 @@ typedef struct
   int min;
   int max;
   long objetivo;
-  long solution;
+  long solucion;
 } Busqueda;
 
 

@@ -6,79 +6,81 @@ void catcher(int sig)
 {
     switch (sig)
     {
-    case SIGUSR1:
-        break;
-    case SIGUSR2:
-        break;
     case SIGINT:
         sint = 1;
-        break;
-    case SIGALRM:
-        salarm = 1;
         break;
     }
 }
 
-void anadirElemento(Dato *bloque_shm, Dato *bloque_mq)
+void anadirElemento(Bloque *bloque_shm, Bloque *bloque_mq)
 {
-    bloque_shm->fin = bloque_mq->fin;
+    bloque_shm->id = bloque_mq->id;
+    bloque_shm->ganador = bloque_mq->ganador;
+    memcpy(bloque_shm->carteras, bloque_mq->carteras, sizeof(Cartera) * MAX_MINEROS);
+
+    bloque_shm->votos_totales = bloque_mq->votos_totales;
+    bloque_shm->votos_positivos = bloque_mq->votos_positivos;
     bloque_shm->objetivo = bloque_mq->objetivo;
     bloque_shm->solucion = bloque_mq->solucion;
     bloque_shm->correcto = bloque_mq->correcto;
+    bloque_shm->fin = bloque_mq->fin;
 
     return;
 }
 
-/*
-Dato extraerElemento(Dato *bloque_shm)
+Bloque extraerElemento(Bloque *bloque_shm)
 {
-    Dato ret;
+    Bloque ret;
 
-    ret.fin = bloque_shm->fin;
+    ret.id = bloque_shm->id;
+    ret.ganador = bloque_shm->ganador;
+    memcpy(ret.carteras, bloque_shm->carteras, sizeof(Cartera) * MAX_MINEROS);
+    ret.votos_totales = bloque_shm->votos_totales;
+    ret.votos_positivos = bloque_shm->votos_positivos;
     ret.objetivo = bloque_shm->objetivo;
     ret.solucion = bloque_shm->solucion;
     ret.correcto = bloque_shm->correcto;
+    ret.fin = bloque_shm->fin;
 
     return ret;
 }
-*/
 
 void imprimir_bloque(Bloque bloque)
 {
-    int i = 0;
+    int i = 0, tam = 0;
 
     printf("Id:\t\t%04d\n", bloque.id);
-    printf("Winner:\t%d\n",bloque.ganador);
-    printf("Target:\t%ld\n",bloque.objetivo);
-    printf("Solution:\t%ld ",bloque.solucion);
-    if(bloque.correcto == true)
+    printf("Winner:\t%d\n", bloque.ganador);
+    printf("Target:\t%ld\n", bloque.objetivo);
+    printf("Solution:\t%ld ", bloque.solucion);
+    if (bloque.correcto == true)
         printf("(validated)\n");
     else
         printf(("rejected)\n"));
-    printf("Votes:\t%d/%d\n", bloque.votos_positivos, bloque.votos_totales)
+    printf("Votes:\t%d/%d\n", bloque.votos_positivos, bloque.votos_totales);
     printf("Wallets:\t");
 
-    for (i = 0; i < (sizeof(b_actual.carteras) / sizeof(b_actual.carteras[0])); i++)
+    tam = sizeof(bloque.carteras) / sizeof(bloque.carteras[0]);
+
+    for (i = 0; i < tam; i++)
     {
         printf("%d:%02u\t", bloque.carteras[i].id_proceso, bloque.carteras[i].monedas);
     }
     printf("\n\n");
 }
 
-
 void monitor(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
 {
     MemoriaMonitor *bloque_shm;
     Bloque bloque_monitor;
 
-
     if ((bloque_shm = mmap(NULL, SHM_SIZE_MONITOR, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
         close(memory);
-        sem_destroy(sem_fill);
-        sem_destroy(sem_empty);
-        sem_destroy(sem_mutex);
+        sem_close(sem_fill);
+        sem_close(sem_empty);
+        sem_close(sem_mutex);
         exit(EXIT_FAILURE);
     }
 
@@ -86,7 +88,6 @@ void monitor(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
 
     while (1)
     {
-
         sem_wait(sem_fill);
         sem_wait(sem_mutex);
         bloque_monitor = extraerElemento(&bloque_shm->bloque[bloque_shm->front]);
@@ -95,20 +96,19 @@ void monitor(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
         sem_post(sem_empty);
 
         /* Comprobamos si hemos recibido el bloque de finalizacion */
-        if(bloque_monitor.fin == true)
+        if (bloque_monitor.fin == true)
         {
             printf("[%d] Finishing\n", getpid());
             close(memory);
             munmap(bloque_shm, SHM_SIZE_MONITOR);
-            sem_destroy(sem_fill);
-            sem_destroy(sem_empty);
-            sem_destroy(sem_mutex);
+            sem_close(sem_fill);
+            sem_close(sem_empty);
+            sem_close(sem_mutex);
             exit(EXIT_SUCCESS);
         }
 
         /* Imprime el bloque recibido por parte del minero*/
-        imprimir_bloque(bloque);
-
+        imprimir_bloque(bloque_monitor);
     }
 }
 
@@ -117,14 +117,23 @@ void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex
     mqd_t queue;
     MemoriaMonitor *bloque_shm;
     Bloque bloque_mq;
+    struct sigaction sact;
+
+    /* Inicializacion de señales */
+    sigemptyset(&sact.sa_mask);
+    sact.sa_flags = 0;
+    sact.sa_handler = catcher;
+
+    if (sigaction(SIGINT, &sact, NULL) != 0)
+        perror("sigaction() SIGINT error");
 
     if ((bloque_shm = mmap(NULL, SHM_SIZE_MONITOR, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0)) == MAP_FAILED)
     {
         perror("mmap");
         close(memory);
-        sem_destroy(sem_fill);
-        sem_destroy(sem_empty);
-        sem_destroy(sem_mutex);
+        sem_close(sem_fill);
+        sem_close(sem_empty);
+        sem_close(sem_mutex);
         exit(EXIT_FAILURE);
     }
     bloque_shm->front = 0;
@@ -156,7 +165,7 @@ void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex
             bloque_shm->rear = (bloque_shm->rear + 1) % BUFFER_SIZE;
             sem_post(sem_mutex);
             sem_post(sem_fill);
-            wait();
+            wait(NULL);
 
             munmap(bloque_shm, SHM_SIZE_MONITOR);
             close(memory);
@@ -164,7 +173,7 @@ void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex
         }
 
         /* Hemos recibido SIGINT, finalizamos */
-        if(sint == 1) 
+        if (sint == 1)
         {
             /* Enviar bloque de finalizacion en caso de error */
             bloque_mq.fin = true;
@@ -175,7 +184,7 @@ void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex
             sem_post(sem_mutex);
             sem_post(sem_fill);
 
-            wait();
+            wait(NULL);
             munmap(bloque_shm, SHM_SIZE_MONITOR);
             close(memory);
             printf("[%d] Finishing for \n", getpid());
@@ -186,7 +195,8 @@ void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex
         if (pow_hash(bloque_mq.solucion) != bloque_mq.objetivo)
         {
             bloque_mq.correcto = false;
-        } else bloque_mq.correcto = true;
+        }
+        else bloque_mq.correcto = true;
 
         /* Introducimos el bloque en memoria compartida para mandarlo al monitor */
         sem_wait(sem_empty);
@@ -199,27 +209,25 @@ void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex
         /* Si era el bloque final finalizamos */
         if (bloque_mq.fin == true)
         {
-            wait();
+            wait(NULL);
             close(memory);
             munmap(bloque_shm, SHM_SIZE_MONITOR);
             printf("[%d] Finishing\n", getpid());
             exit(EXIT_SUCCESS);
         }
-
     }
 }
 
-int main(int argc, char **argv)
+int main()
 {
     int memory = 0;
     pid_t comprobador_pid;
-    char *strptr;
 
     /* Semaforos sin nombre */
     sem_t *sem_fill = NULL;
     sem_t *sem_empty = NULL;
     sem_t *sem_mutex = NULL;
-
+    
     memory = shm_open(SHM_MONITOR, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
     if (memory == -1)
     {
@@ -227,13 +235,13 @@ int main(int argc, char **argv)
         {
             perror("shm_open");
             close(memory);
-            shm_unlink(SHM_MONITOR); 
+            shm_unlink(SHM_MONITOR);
         }
         exit(EXIT_FAILURE);
     }
     else
     {
-        shm_unlink(SHM_MONITOR); 
+        shm_unlink(SHM_MONITOR);
         if (ftruncate(memory, SHM_SIZE_MONITOR) == -1)
         {
             perror("ftruncate");
@@ -243,31 +251,35 @@ int main(int argc, char **argv)
     }
 
     /* Inicializacion de semaforos */
-    if (sem_init(sem_fill, 0, 0) == -1)
+    if ((sem_fill = sem_open(SEM_FILL, O_CREAT | O_EXCL , S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
     {
-        perror("sem_init");
+        perror("sem_open");
         exit(EXIT_FAILURE);
     }
 
-    if (sem_init(sem_empty, 0, BUFFER_SIZE) == -1)
+    if ((sem_empty = sem_open(SEM_EMPTY, O_CREAT | O_EXCL , S_IRUSR | S_IWUSR, BUFFER_SIZE)) == SEM_FAILED)
     {
-        perror("sem_init");
-        sem_destroy(sem_fill);
+        perror("sem_open");
+        sem_close(sem_fill);
         exit(EXIT_FAILURE);
     }
 
-    if (sem_init(&bloque_shm->sem_mutex, 0, 1) == -1)
+    if ((sem_mutex = sem_open(SEM_MUTEX, O_CREAT | O_EXCL , S_IRUSR | S_IWUSR, 1)) == SEM_FAILED)
     {
-        perror("sem_init");
-        sem_destroy(&bloque_shm->sem_fill);
-        sem_destroy(&bloque_shm->sem_empty);
+        perror("sem_open");
+        sem_close(sem_fill);
+        sem_close(sem_empty);
         exit(EXIT_FAILURE);
     }
+
+    sem_unlink(SEM_FILL);
+    sem_unlink(SEM_EMPTY);
+    sem_unlink(SEM_MUTEX);
 
     comprobador_pid = fork();
     pid_error_handler(comprobador_pid);
 
-    if(comprobador_pid == 0) /* Proceso monitor */
+    if (comprobador_pid == 0) /* Proceso monitor */
     {
         monitor(memory, sem_fill, sem_empty, sem_mutex);
     }
