@@ -1,8 +1,23 @@
+/**
+ * @file minero.c
+ * @author Luis Miguel Nucifora & Alexis Canales Molina.
+ * @brief Code for the miner, who will mine to find the solution to a problem
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
+
 #include "minero.h"
 
 static volatile sig_atomic_t sint = 0;
 static volatile sig_atomic_t salarm = 0;
 
+/**
+ * @brief Handler for SIGINT and SIGALRM
+ *
+ * @param sig signal to be treated
+ * @return void
+ */
 void catcher(int sig)
 {
   switch (sig)
@@ -20,6 +35,7 @@ void catcher(int sig)
  * @brief Comprueba si ha habido algun error en la creacion de una tuberia
  *
  * @param estado de la tuberia
+ * @return void
  */
 void pipe_error_handler(int pipe_status)
 {
@@ -67,8 +83,8 @@ void *target_search(void *busqueda)
  * @brief Create and manage threads that will search the solution of the POW function.
  *
  * @param n_threads Number of threads to manage.
- * @param bloque
- * @return Modified block.
+ * @param objetivo objective to look for the solution
+ * @return solution to the search
  */
 long manage_threads(int n_threads, long objetivo)
 {
@@ -118,6 +134,15 @@ long manage_threads(int n_threads, long objetivo)
   return solucion;
 }
 
+/**
+ * @brief Main which does the main functionality of the miner, including:
+ *    creation of the child Registrador, mining, votation and delivery
+ *    of the obtained block
+ *
+ * @param argc Number of arguments received
+ * @param argv arguments received as strings
+ * @return EXIT_SUCCESS if everything went right, EXIT_FAILURE otherwise
+ */
 int main(int argc, char **argv)
 {
 
@@ -387,7 +412,6 @@ int main(int argc, char **argv)
       /* Votacion terminada, comprobando votos */
       if (mem->bl_actual.votos_positivos >= ceil(mem->bl_actual.votos_totales / 2))
       {
-        printf("GANO MONEDA\n");
         mem->bl_actual.carteras[n_minero-1].monedas++;
       }
 
@@ -457,7 +481,6 @@ int main(int argc, char **argv)
     }
 
     /* Fin del while, hemos recibido SIGINT o SIGALARM */
-    printf("HE RECIBIDO SIGINT O SIGALARM\n");
 
     /* Envio por la cola de mensajes el bloque de finalizacion al monitor*/
     if (mq_getattr(queue, &attr) == -1)

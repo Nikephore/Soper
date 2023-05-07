@@ -1,3 +1,14 @@
+/**
+ * @file pow.c
+ * @author SOPER teaching team.
+ * @brief Computation of the POW.
+ * @version 1.5
+ * @date 2023-02-02
+ *
+ * @copyright Copyright (c) 2022
+ *
+ */
+
 #include "pow.h"
 #include <stdlib.h>
 #include <stdio.h>
