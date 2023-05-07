@@ -1,7 +1,22 @@
+/**
+ * @file monitor.c
+ * @author Luis Miguel Nucifora & Alexis Canales Molina.
+ * @brief Code for the monitor, who will check the answers from the miners and print them
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
+
 #include "common.h"
 
 static volatile sig_atomic_t sint = 0;
 
+/**
+ * @brief Handler for SIGINT
+ *
+ * @param sig signal to be treated
+ * @return void
+ */
 void catcher(int sig)
 {
     switch (sig)
@@ -12,6 +27,13 @@ void catcher(int sig)
     }
 }
 
+/**
+ * @brief Puts a block in the shared memory
+ *
+ * @param bloque_shm pointer to the zone of the shared memoryfor it to be introduced
+ * @param bloque_mp pointer to the block to be introduced
+ * @return void
+ */
 void anadirElemento(Bloque *bloque_shm, Bloque *bloque_mq)
 {
     bloque_shm->id = bloque_mq->id;
@@ -28,6 +50,12 @@ void anadirElemento(Bloque *bloque_shm, Bloque *bloque_mq)
     return;
 }
 
+/**
+ * @brief Extracts a block from the shared memory
+ *
+ * @param bloque_shm pointer to the block to be extracted
+ * @return the extracted block
+ */
 Bloque extraerElemento(Bloque *bloque_shm)
 {
     Bloque ret;
@@ -45,6 +73,12 @@ Bloque extraerElemento(Bloque *bloque_shm)
     return ret;
 }
 
+/**
+ * @brief Prints a block in standard output
+ *
+ * @param bloque block to be printed
+ * @return void
+ */
 void imprimir_bloque(Bloque bloque)
 {
     int i = 0, tam = 0;
@@ -69,6 +103,16 @@ void imprimir_bloque(Bloque bloque)
     printf("\n\n");
 }
 
+/**
+ * @brief Monitor which does the main functionality of the Monitor, including:
+ *    receiving messages and printing them
+ *
+ * @param memory file descriptor to shared memory
+ * @param sem_fill fill semaphore
+ * @param sem_empty empty semaphore
+ * @param sem_mutex mutex semaphore
+ * @return EXIT_SUCCESS if everything went right, EXIT_FAILURE otherwise
+ */
 void monitor(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
 {
     MemoriaMonitor *bloque_shm;
@@ -112,6 +156,17 @@ void monitor(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
     }
 }
 
+/**
+ * @brief Comprobador which does the main functionality of the Comprobador, including:
+ *    opening the message queue, receiving messages, checking them 
+ *    and putting them in shared memory
+ *
+ * @param memory file descriptor to shared memory
+ * @param sem_fill fill semaphore
+ * @param sem_empty empty semaphore
+ * @param sem_mutex mutex semaphore
+ * @return EXIT_SUCCESS if everything went right, EXIT_FAILURE otherwise
+ */
 void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex)
 {
     mqd_t queue;
@@ -218,6 +273,12 @@ void comprobador(int memory, sem_t *sem_fill, sem_t *sem_empty, sem_t *sem_mutex
     }
 }
 
+/**
+ * @brief Main which does the main functionality of the monitor, including:
+ *    creation of the child Monitor and initializing shared memory
+ *
+ * @return EXIT_SUCCESS if everything went right, EXIT_FAILURE otherwise
+ */
 int main()
 {
     int memory = 0;

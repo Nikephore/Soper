@@ -1,3 +1,12 @@
+/**
+ * @file common.h
+ * @author Luis Miguel Nucifora & Alexis Canales Molina.
+ * @brief Common functions and constants used by both miner and monitor
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,6 +100,11 @@ typedef struct
 
 } MemoriaMonitor;
 
+/**
+ * Estructura de datos con el rango de
+ * búsqueda de cada hilo, el objetivo
+ * y la solución
+*/
 typedef struct
 {
   int min;

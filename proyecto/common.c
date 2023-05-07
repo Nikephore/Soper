@@ -1,3 +1,12 @@
+/**
+ * @file common.c
+ * @author Luis Miguel Nucifora & Alexis Canales Molina.
+ * @brief Common functions used by both miner and monitor
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
+
 #include "common.h"
 
 void number_range_error_handler(int min, int max, int value, char *msg)
